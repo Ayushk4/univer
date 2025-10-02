@@ -5,7 +5,12 @@ This script makes hardcoded calls to the UniverSheetsController to verify
 that all the read-only tools work correctly.
 
 Usage:
-    python test_mcp.py [--url http://localhost:3002/sheets/] [--headless]
+    python test_mcp.py [--url http://localhost:3002/sheets/] [--headless] [--quick]
+    
+Options:
+    --url URL       Univer server URL (default: http://localhost:3002/sheets/)
+    --headless      Run browser in headless mode
+    --quick         Run quick smoke test only (4 tests instead of 10)
 """
 
 import asyncio
@@ -122,11 +127,52 @@ async def run_tests(url: str = "http://localhost:3002/sheets/", headless: bool =
         print("✅ Cleanup complete!")
 
 
+async def quick_test(url: str = "http://localhost:3002/sheets/", headless: bool = False):
+    """Quick smoke test - minimal verification of MCP server functionality"""
+    print("🚀 Starting quick test...\n")
+    
+    controller = UniverSheetsController()
+    
+    try:
+        # Connect
+        print("1. Connecting to Univer...")
+        await controller.start(url, headless=headless)
+        print("   ✅ Connected!\n")
+        
+        # Get status
+        print("2. Getting workbook status...")
+        status = await controller.get_activity_status()
+        print(f"   ✅ Active sheet: {status['activeSheetName']}")
+        print(f"   ✅ Total sheets: {status['sheetCount']}\n")
+        
+        # Get some data
+        print("3. Reading range A1:C3...")
+        data = await controller.get_range_data("A1:C3")
+        print(f"   ✅ Retrieved {len(data['values'])} rows\n")
+        
+        # List sheets
+        print("4. Getting all sheets...")
+        sheets = await controller.get_sheets()
+        print(f"   ✅ Found {len(sheets)} sheet(s):")
+        for sheet in sheets:
+            print(f"      - {sheet['name']}")
+        
+        print("\n✨ All tests passed! MCP server is working.\n")
+        
+    except Exception as e:
+        print(f"\n❌ Test failed: {e}\n")
+        import traceback
+        traceback.print_exc()
+    finally:
+        await controller.cleanup()
+
+
 async def main():
     """Main entry point"""
     # Parse command line arguments
     univer_url = "http://localhost:3002/sheets/"
     headless = False
+    quick_mode = False
     
     if "--url" in sys.argv:
         idx = sys.argv.index("--url")
@@ -136,11 +182,18 @@ async def main():
     if "--headless" in sys.argv:
         headless = True
     
+    if "--quick" in sys.argv:
+        quick_mode = True
+    
     if "--help" in sys.argv or "-h" in sys.argv:
         print(__doc__)
         return
     
-    await run_tests(univer_url, headless)
+    # Run appropriate test suite
+    if quick_mode:
+        await quick_test(univer_url, headless)
+    else:
+        await run_tests(univer_url, headless)
 
 
 if __name__ == "__main__":
