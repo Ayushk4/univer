@@ -105,33 +105,178 @@
                 overflow-y: auto;
             }
 
-            .result-box {
+            .event-box {
                 background-color: #fff;
                 border-radius: 6px;
-                padding: 20px;
-                margin-bottom: 15px;
+                padding: 16px;
+                margin-bottom: 12px;
                 box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                border-left: 4px solid #e0e0e0;
             }
 
-            .result-box h3 {
-                margin-bottom: 10px;
-                color: #333;
-                font-size: 16px;
+            .event-header {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 8px;
             }
 
-            .result-box pre {
+            .event-icon {
+                font-size: 18px;
+            }
+
+            .event-type {
+                font-weight: 600;
+                font-size: 13px;
+                color: #555;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .event-timestamp {
+                margin-left: auto;
+                font-size: 11px;
+                color: #999;
+                font-family: monospace;
+            }
+
+            .event-content {
+                padding: 8px 12px;
+                background-color: #f8f9fa;
+                border-radius: 4px;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+
+            .event-content pre {
+                margin: 0;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+            }
+
+            /* Event type specific styling */
+            .event-box.agent-message {
+                border-left-color: #28a745;
+            }
+
+            .event-box.agent-message-delta {
+                border-left-color: #20c997;
+            }
+
+            .event-box.tool-call {
+                border-left-color: #ffc107;
+            }
+
+            .event-box.tool-result {
+                border-left-color: #17a2b8;
+            }
+
+            .event-box.thinking {
+                border-left-color: #e83e8c;
+            }
+
+            .event-box.error {
+                border-left-color: #dc3545;
+                background-color: #fff5f5;
+            }
+
+            .event-box.final-result {
+                border-left-color: #28a745;
+                background: linear-gradient(135deg, #e8f5e9 0%, #f1f8f4 100%);
+            }
+
+            /* Collapsible internal events */
+            .event-box.collapsible {
+                cursor: pointer;
+                padding: 8px 16px;
+                transition: all 0.2s ease;
+            }
+
+            .event-box.collapsible:hover {
+                background-color: #f8f9fa;
+            }
+
+            .event-box.collapsible .event-content {
+                display: none;
+                padding-top: 8px;
+            }
+
+            .event-box.collapsible.expanded .event-content {
+                display: block;
+            }
+
+            .event-box.collapsible .expand-indicator {
+                margin-left: 8px;
+                font-size: 10px;
+                color: #999;
+            }
+
+            .event-box.collapsible.expanded .expand-indicator::before {
+                content: '▼';
+            }
+
+            .event-box.collapsible:not(.expanded) .expand-indicator::before {
+                content: '▶';
+            }
+
+            /* Markdown rendered content */
+            .markdown-content {
+                line-height: 1.6;
+            }
+
+            .markdown-content h1,
+            .markdown-content h2,
+            .markdown-content h3 {
+                margin-top: 12px;
+                margin-bottom: 8px;
+            }
+
+            .markdown-content p {
+                margin-bottom: 8px;
+            }
+
+            .markdown-content code {
+                background-color: #f5f5f5;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-family: 'Courier New', monospace;
+                font-size: 13px;
+            }
+
+            .markdown-content pre {
                 background-color: #f5f5f5;
                 padding: 12px;
                 border-radius: 4px;
                 overflow-x: auto;
-                white-space: pre-wrap;
-                font-size: 13px;
-                line-height: 1.5;
+                margin: 8px 0;
             }
 
-            .answer-box {
-                background-color: #e8f5e9;
-                border-left: 4px solid #4caf50;
+            .markdown-content pre code {
+                background: none;
+                padding: 0;
+            }
+
+            .markdown-content ul,
+            .markdown-content ol {
+                margin-left: 20px;
+                margin-bottom: 8px;
+            }
+
+            .markdown-content blockquote {
+                border-left: 3px solid #ddd;
+                padding-left: 12px;
+                color: #666;
+                margin: 8px 0;
+            }
+
+            .tool-args {
+                margin-top: 8px;
+                padding: 8px;
+                background-color: #fff;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
             }
 
             .loading {
@@ -140,12 +285,44 @@
                 color: #666;
             }
 
-            .error {
-                background-color: #ffebee;
-                border-left: 4px solid #f44336;
-                padding: 15px;
-                border-radius: 4px;
-                color: #c62828;
+            .spinner {
+                display: inline-block;
+                width: 20px;
+                height: 20px;
+                border: 3px solid rgba(0, 0, 0, 0.1);
+                border-radius: 50%;
+                border-top-color: #007bff;
+                animation: spin 1s linear infinite;
+            }
+
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+
+            .streaming-text {
+                display: inline;
+            }
+
+            .typing-cursor {
+                display: inline-block;
+                width: 2px;
+                height: 1em;
+                background-color: #007bff;
+                animation: blink 1s infinite;
+                margin-left: 2px;
+            }
+
+            @keyframes blink {
+                0%,
+                50% {
+                    opacity: 1;
+                }
+                51%,
+                100% {
+                    opacity: 0;
+                }
             }
         </style>
     </head>
@@ -157,7 +334,7 @@
         <div id="right-panel">
             <div id="header">
                 <h1>AI Assistant</h1>
-                <p>Ask a question about the spreadsheet (single query only)</p>
+                <p>Ask questions about your spreadsheet</p>
             </div>
 
             <div id="input-area">
@@ -168,10 +345,15 @@
                 <button id="submit-btn">Send Query</button>
             </div>
 
-            <div id="output-area" id="output">
-                <p style="color: #999; text-align: center; margin-top: 40px">Enter a question to get started</p>
+            <div id="output-area">
+                <p style="color: #999; text-align: center; margin-top: 40px">
+                    Enter a question to get started
+                </p>
             </div>
         </div>
+
+        <!-- Markdown rendering library -->
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
         <script>
             const promptInput = document.getElementById('prompt');
@@ -181,6 +363,7 @@
             let submitted = false;
             let startTime = null;
             let timerInterval = null;
+            let currentStreamingBox = null;
 
             submitBtn.addEventListener('click', async () => {
                 if (submitted) return;
@@ -202,10 +385,11 @@
                 // Show initial state with timer
                 outputArea.innerHTML = `
                 <div class="loading">
-                    🤖 Processing your query...<br>
+                    <div class="spinner"></div>
+                    <p style="margin-top: 10px">Processing your query...</p>
                     <div id="timer" style="margin-top: 10px; font-family: monospace;">Elapsed: 0.0s</div>
                 </div>
-                <div id="steps-container"></div>
+                <div id="events-container"></div>
             `;
 
                 // Update timer every 100ms
@@ -216,44 +400,72 @@
                 }, 100);
 
                 try {
-                    // Use EventSource for SSE
-                    const eventSource = new EventSource(
-                        '/query?' +
-                            new URLSearchParams({
-                                prompt: prompt,
-                            }),
-                    );
+                    // Send request
+                    const response = await fetch('/query', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            prompt: prompt,
+                        }),
+                    });
 
-                    let hasReceivedData = false;
-                    let isDone = false;
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
 
-                    eventSource.onmessage = (event) => {
-                        hasReceivedData = true;
-                        const data = JSON.parse(event.data);
-                        if (data.type === 'done') {
-                            isDone = true;
-                            eventSource.close();
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || '';
+
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                const data = line.slice(6);
+                                if (data.trim()) {
+                                    try {
+                                        const event = JSON.parse(data);
+                                        handleEvent(event);
+                                    } catch (e) {
+                                        console.error('Failed to parse event:', e, data);
+                                    }
+                                }
+                            }
                         }
-                        handleSSEMessage(data);
-                    };
+                    }
 
-                    eventSource.onerror = (error) => {
-                        eventSource.close();
-                        clearInterval(timerInterval);
-                        // Only show error if we haven't completed successfully
-                        if (!isDone && !document.querySelector('.answer-box')) {
-                            outputArea.innerHTML = `
-                            <div class="error">
-                                <strong>Error:</strong> ${hasReceivedData ? 'Connection interrupted' : 'Failed to connect to server'}
-                            </div>
-                        `;
-                        }
-                    };
+                    // Remove loading indicator
+                    const loading = document.querySelector('.loading');
+                    if (loading) loading.remove();
+                    clearInterval(timerInterval);
+
+                    // Add completion message
+                    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                    const doneDiv = document.createElement('div');
+                    doneDiv.style.cssText =
+                        'text-align: center; padding: 15px; color: #28a745; font-weight: bold;';
+                    doneDiv.textContent = `✓ Completed in ${elapsed}s`;
+                    document.getElementById('events-container').appendChild(doneDiv);
                 } catch (error) {
+                    console.error('Error:', error);
                     clearInterval(timerInterval);
                     outputArea.innerHTML = `
-                    <div class="error">
-                        <strong>Error:</strong> ${error.message}
+                    <div class="event-box error">
+                        <div class="event-header">
+                            <span class="event-icon">❌</span>
+                            <span class="event-type">Error</span>
+                        </div>
+                        <div class="event-content">
+                            <strong>Error:</strong> ${escapeHtml(error.message)}
+                        </div>
                     </div>
                 `;
                 }
@@ -267,62 +479,139 @@
                 }
             });
 
-            function handleSSEMessage(data) {
-                const stepsContainer = document.getElementById('steps-container');
+            function handleEvent(event) {
+                const container = document.getElementById('events-container');
                 const now = new Date();
                 const timestamp = now.toLocaleTimeString() + '.' + String(now.getMilliseconds()).padStart(3, '0');
 
-                if (data.type === 'step') {
-                    // Add step to container
-                    const stepDiv = document.createElement('div');
-                    stepDiv.className = 'result-box';
-                    stepDiv.innerHTML = `
-                    <div style="color: #666; font-size: 12px; margin-bottom: 5px;">⏱️ ${timestamp}</div>
-                    <pre>${escapeHtml(data.data)}</pre>
-                `;
-                    stepsContainer.appendChild(stepDiv);
-                    stepDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
-                } else if (data.type === 'final') {
-                    // Add final answer
-                    const finalDiv = document.createElement('div');
-                    finalDiv.className = 'result-box answer-box';
-                    finalDiv.innerHTML = `
-                    <h3>✅ Answer</h3>
-                    <div style="color: #666; font-size: 12px; margin-bottom: 5px;">⏱️ ${timestamp}</div>
-                    <pre>${escapeHtml(data.answer)}</pre>
-                `;
-                    stepsContainer.appendChild(finalDiv);
+                const eventType = event.type || 'unknown';
 
-                    if (data.usage) {
-                        const usageDiv = document.createElement('div');
-                        usageDiv.className = 'result-box';
-                        usageDiv.innerHTML = `
-                        <h3>📊 Usage</h3>
-                        <pre>${escapeHtml(data.usage)}</pre>
-                    `;
-                        stepsContainer.appendChild(usageDiv);
-                    }
+                switch (eventType) {
+                    case 'agent_message':
+                        const messageBox = addEventBox('agent-message', 'Agent Message', '💬', '', timestamp);
+                        const messageContent = messageBox.querySelector('.event-content');
+                        messageContent.innerHTML = `<div class="markdown-content">${marked.parse(event.content)}</div>`;
+                        break;
 
-                    finalDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
-                } else if (data.type === 'done') {
-                    // Remove loading indicator and stop timer
-                    const loading = document.querySelector('.loading');
-                    if (loading) loading.remove();
-                    clearInterval(timerInterval);
+                    case 'agent_message_delta':
+                        if (!currentStreamingBox) {
+                            currentStreamingBox = addEventBox(
+                                'agent-message-delta',
+                                'Agent Response',
+                                '💬',
+                                '',
+                                timestamp,
+                                true
+                            );
+                        }
+                        // Append delta and re-render as markdown
+                        const streamingText = currentStreamingBox.querySelector('.streaming-text');
+                        if (streamingText) {
+                            const currentText = streamingText.getAttribute('data-raw-text') || '';
+                            const newText = currentText + (event.content || '');
+                            streamingText.setAttribute('data-raw-text', newText);
+                            streamingText.innerHTML = `<div class="markdown-content">${marked.parse(newText)}</div>`;
+                        }
+                        break;
 
-                    // Add completion message
-                    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-                    const doneDiv = document.createElement('div');
-                    doneDiv.style.cssText = 'text-align: center; padding: 15px; color: #4caf50; font-weight: bold;';
-                    doneDiv.textContent = `✓ Completed in ${elapsed}s`;
-                    stepsContainer.appendChild(doneDiv);
-                } else if (data.type === 'error') {
-                    clearInterval(timerInterval);
-                    outputArea.innerHTML = `
-                    <div class="error">
-                        <strong>Error:</strong> ${escapeHtml(data.message)}
+                    case 'tool_call':
+                        // Reset streaming box when we encounter a tool call
+                        currentStreamingBox = null;
+                        const toolCallContent = `<strong>Tool:</strong> ${event.tool_name || 'unknown'}<br>
+                            <div class="tool-args">
+                                <strong>Arguments:</strong><br>
+                                ${JSON.stringify(event.arguments || {}, null, 2)}
+                            </div>`;
+                        addCollapsibleEventBox('tool-call', 'Tool Call', '🔧', toolCallContent, timestamp, event.tool_name);
+                        break;
+
+                    case 'tool_result':
+                        // Reset streaming box when we get a tool result
+                        currentStreamingBox = null;
+                        const resultContent = `<strong>Tool:</strong> ${event.tool_name || 'unknown'}<br>
+                            <strong>Result:</strong><br>
+                            <pre>${escapeHtml(typeof event.result === 'string' ? event.result : JSON.stringify(event.result, null, 2))}</pre>`;
+                        addCollapsibleEventBox('tool-result', 'Tool Result', '✅', resultContent, timestamp, event.tool_name);
+                        break;
+
+                    case 'thinking':
+                        addEventBox('thinking', 'Thinking', '🤔', event.content || 'Processing...', timestamp);
+                        break;
+
+                    case 'final_result':
+                        currentStreamingBox = null;
+                        const finalBox = addEventBox('final-result', 'Final Result', '🎯', '', timestamp);
+                        const finalContent = finalBox.querySelector('.event-content');
+                        const resultText = typeof event.result === 'string' ? event.result : JSON.stringify(event.result, null, 2);
+                        finalContent.innerHTML = `<div class="markdown-content">${marked.parse(resultText)}</div>`;
+                        break;
+
+                    case 'error':
+                        addEventBox('error', 'Error', '❌', event.error || event.message || 'Unknown error', timestamp);
+                        break;
+
+                    default:
+                        const unknownContent = `<pre>${escapeHtml(JSON.stringify(event, null, 2))}</pre>`;
+                        addEventBox('unknown', eventType, 'ℹ️', unknownContent, timestamp);
+                }
+
+                // Auto-scroll to bottom
+                container.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            }
+
+            function addEventBox(className, typeLabel, icon, content, timestamp, isStreaming = false) {
+                const container = document.getElementById('events-container');
+                const box = document.createElement('div');
+                box.className = `event-box ${className}`;
+                box.innerHTML = `
+                    <div class="event-header">
+                        <span class="event-icon">${icon}</span>
+                        <span class="event-type">${typeLabel}</span>
+                        <span class="event-timestamp">${timestamp}</span>
+                    </div>
+                    <div class="event-content">
+                        <div class="streaming-text" data-raw-text="">${content}</div>
+                        ${isStreaming ? '<span class="typing-cursor"></span>' : ''}
                     </div>
                 `;
+                container.appendChild(box);
+                return box;
+            }
+
+            function addCollapsibleEventBox(className, typeLabel, icon, content, timestamp, toolName) {
+                const container = document.getElementById('events-container');
+                const box = document.createElement('div');
+                box.className = `event-box ${className} collapsible`;
+                box.innerHTML = `
+                    <div class="event-header">
+                        <span class="event-icon">${icon}</span>
+                        <span class="event-type">${typeLabel}</span>
+                        <span style="color: #666; font-weight: normal; font-size: 12px; margin-left: 8px;">${toolName || ''}</span>
+                        <span class="expand-indicator"></span>
+                        <span class="event-timestamp">${timestamp}</span>
+                    </div>
+                    <div class="event-content">
+                        ${content}
+                    </div>
+                `;
+                
+                // Add click handler to toggle expansion
+                box.addEventListener('click', function(e) {
+                    // Don't toggle if clicking on the content itself when expanded
+                    if (this.classList.contains('expanded') && e.target.closest('.event-content')) {
+                        return;
+                    }
+                    this.classList.toggle('expanded');
+                });
+                
+                container.appendChild(box);
+                return box;
+            }
+
+            function appendToStreamingBox(box, delta) {
+                const streamingText = box.querySelector('.streaming-text');
+                if (streamingText) {
+                    streamingText.textContent += delta;
                 }
             }
 
