@@ -1,0 +1,1418 @@
+{
+  "name": "get_activity_status",
+  "description": "Get workbook UI status. Returns total sheet count, first 10 sheet names, current active sheet name, visible range, errors, and selection. If screenshot is True, also returns a screenshot.\nArgs:\n    screenshot: Whether to return a screenshot (default False).\nReturns:\n    list: TextContent (UI status info) and optional ImageContent (screenshot).",
+  "inputSchema": {
+    "properties": {
+      "screenshot": {
+        "default": false,
+        "title": "Screenshot",
+        "type": "boolean"
+      }
+    },
+    "type": "object"
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "get_range_data",
+  "description": "Get the cell data grid for the specified range(s) (A1 notation) in the active workbook, with flexible output.\nArgs:\n    range_a1: The cell/range in A1 notation (e.g., 'A1', 'B2:C3'), or a list of such strings.\n    return_screenshot: Whether to return a screenshot of the range (default False)\n    return_style: Whether to return style information for cells (default False)\nReturns:\n    If screenshot: also returns a screenshot as ImageContent.\nNote:\n    Do not fetch too large a range at once. It is not recommended to get data for a range where rows * columns > 200 cells.",
+  "inputSchema": {
+    "properties": {
+      "range_a1": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        ],
+        "title": "Range A1"
+      },
+      "return_screenshot": {
+        "default": false,
+        "title": "Return Screenshot",
+        "type": "boolean"
+      },
+      "return_style": {
+        "default": false,
+        "title": "Return Style",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "range_a1"
+    ],
+    "type": "object"
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "scroll_and_screenshot",
+  "description": "Scroll the UI so the specified cell is at the top-left of the viewport, then capture and return a screenshot.\nBy default, the viewport is positioned at cell A1. Use this tool to scroll to a different cell and get a visual snapshot in one step.\nThis is a UI interaction tool; do not call a separate screenshot tool after using this one.\nArgs:\n    cell_a1: The cell in A1 notation to scroll to (e.g., 'D10').\nReturns:\n    List containing TextContent and ImageContent of the viewport after scrolling.\nRaises:\n    Exception: If no workbook is active in the session.",
+  "inputSchema": {
+    "properties": {
+      "cell_a1": {
+        "title": "Cell A1",
+        "type": "string"
+      }
+    },
+    "required": [
+      "cell_a1"
+    ],
+    "type": "object"
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "set_range_data",
+  "description": "Batch set value or formula for multiple ranges in the active workbook.\nUsage examples:\n    - set_range_data([\n          {\"range\": \"Sheet1!A1\", \"value\": \"Hello\"},\n          {\"range\": \"B1\", \"value\": \"=A1\"},\n          {\"range\": \"A1:B1\", \"value\": [\"A1\", \"B1\"]},\n          {\"range\": \"A1:A2\", \"value\": [\"A1\", \"A2\"]},\n          {\"range\": \"A1:B2\", \"value\": [[\"A1\", \"B1\"], [\"A2\", \"B2\"]]}\n      ])\nArgs:\n    items: List of BatchRangeDataItem, each with:\n        - 'range': Range string in A1 notation (e.g., 'A1', 'Sheet1!A1', 'A1:B2'). Supports comma-separated multiple ranges.\n        - 'value': Value for the range (str, number, bool, 1D/2D array, or dict). If a string starts with '=', it is treated as a formula.\nReturns:\n    'Success' if all operations complete.\nNote:\n    For batch setting values and styles with a regular pattern (horizontally or vertically), you can also use the auto_fill tool to automatically fill values and styles across a range.",
+  "inputSchema": {
+    "$defs": {
+      "BatchRangeDataItem": {
+        "properties": {
+          "range": {
+            "description": "Range string (A1 notation), supports comma-separated multiple ranges, e.g. 'A1,B2:C3'",
+            "title": "Range",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            ],
+            "description": "Value for the range",
+            "title": "Value"
+          }
+        },
+        "required": [
+          "range",
+          "value"
+        ],
+        "title": "BatchRangeDataItem",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/$defs/BatchRangeDataItem"
+        },
+        "title": "Items",
+        "type": "array"
+      }
+    },
+    "required": [
+      "items"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "title": "Result",
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "set_range_style",
+  "description": "Batch set style for multiple ranges in the active workbook.\nArgs:\n    items: List of BatchRangeStyleItem, each with 'range' (A1 notation, supports comma-separated multiple ranges) and 'style'.\nReturns:\n    'Success' if operation completes.",
+  "inputSchema": {
+    "$defs": {
+      "BatchRangeStyleItem": {
+        "properties": {
+          "range": {
+            "description": "Range string (A1 notation), supports comma-separated multiple ranges, e.g. 'A1,B2:C3'",
+            "title": "Range",
+            "type": "string"
+          },
+          "style": {
+            "$ref": "#/$defs/IAnyStyleData",
+            "description": "Style object for the range"
+          }
+        },
+        "required": [
+          "range",
+          "style"
+        ],
+        "title": "BatchRangeStyleItem",
+        "type": "object"
+      },
+      "IAnyStyleData": {
+        "additionalProperties": true,
+        "description": "Style object properties:\n- ff: font family (e.g., \"Arial\")\n- fs: font size, pt (e.g., 11)\n- it: italic (0|1)\n- bl: bold (0|1)\n- ul: underline (ITextLine)\n- st: strike through (ITextLine)\n- ol: overline (ITextLine)\n- bg: background color, e.g., {\"rgb\": \"#FF0000\"}\n- bd: border, e.g., { t: ILineBase, b: ILineBase, l: ILineBase, r: ILineBase }\n- cl: font color, e.g., {\"rgb\": \"#000000\"}\n- va: vertical alignment, 1 normal, 2 subscript, 3 superscript\n- tr: text rotation, e.g., { a: 45 }\n- td: text direction, 1 left to right, 2 right to left\n- ht: horizontal text alignment, 1 left, 2 center, 3 right\n- vt: vertical text alignment, 1 top, 2 middle, 3 bottom\n- tb: text overflow, 1 overflow, 2 truncate, 3 wrap\n- pd: content padding, e.g., { t: 2, b: 2, l: 2, r: 2 }\n- n: number format, e.g., { pattern: \"#,##0.00\" }\n\nITextLine: { s: 0|1, cl: string, c?: 0|1, t?: string }\nILineBase: { s: 0|1, cl: string }\n\nNote: Both the border thickness and font size are measured in points (pt).",
+        "properties": {},
+        "title": "IAnyStyleData",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/$defs/BatchRangeStyleItem"
+        },
+        "title": "Items",
+        "type": "array"
+      }
+    },
+    "required": [
+      "items"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "title": "Result",
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "set_merge",
+  "description": "Merge a single range in the active workbook.\nUsage:\n    - set_merge('A1:B2')  # single\nArgs:\n    range_a1: Range string (A1 notation)\nReturns:\n    'Success' if operation completes.",
+  "inputSchema": {
+    "properties": {
+      "range_a1": {
+        "title": "Range A1",
+        "type": "string"
+      }
+    },
+    "required": [
+      "range_a1"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "title": "Result",
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "get_active_unit_id",
+  "description": "Get the currently active unit_id for this session.\nRaises an exception if no workbook is active.",
+  "inputSchema": {
+    "properties": {},
+    "type": "object"
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "search_cells",
+  "description": "Search cells in the currently active workbook by keyword and findBy type.\nArgs:\n    keyword: The search keyword, e.g., '='\n    find_by: The search type, e.g., 'formula' or 'value'\nReturns:\n    dict: {\"total\": total matches, \"results\": [up to 50 items, each with range_a1, value (truncated to 200 chars if too long), formula]}\nRaises:\n    Exception: If there is no active workbook.\nNote:\n    The value field will be truncated to at most 200 characters if it is a long string.",
+  "inputSchema": {
+    "properties": {
+      "keyword": {
+        "title": "Keyword",
+        "type": "string"
+      },
+      "find_by": {
+        "title": "Find By",
+        "type": "string"
+      }
+    },
+    "required": [
+      "keyword",
+      "find_by"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": true,
+    "type": "object"
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "get_sheets",
+  "description": "Get all sheets (name and ID) in the current workbook.\nArgs:\nReturns:\n    List[dict]: List of sheets, each as {\"name\": sheetName}\nRaises:\n    Exception: If no Univer document is active in the session.",
+  "inputSchema": {
+    "properties": {},
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "items": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "title": "Result",
+        "type": "array"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "insert_rows",
+  "description": "Batch insert empty rows for multiple operations. Efficiently inserts rows in multiple locations in one operation.\nArgs:\n    operations: List of InsertRowOperation objects for each insert operation.\nReturns:\n    Dictionary with status, message and details of each operation.",
+  "inputSchema": {
+    "$defs": {
+      "InsertRowOperation": {
+        "properties": {
+          "position": {
+            "description": "Row index (0-based) where to insert",
+            "title": "Position",
+            "type": "integer"
+          },
+          "how_many": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 1,
+            "description": "Number of rows to insert (default 1)",
+            "title": "How Many"
+          },
+          "where": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "before",
+            "description": "Insert 'before' or 'after' the position (default 'before')",
+            "title": "Where"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Sheet name (optional, uses active sheet if not provided)",
+            "title": "Sheet Name"
+          }
+        },
+        "required": [
+          "position"
+        ],
+        "title": "InsertRowOperation",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "operations": {
+        "items": {
+          "$ref": "#/$defs/InsertRowOperation"
+        },
+        "title": "Operations",
+        "type": "array"
+      }
+    },
+    "required": [
+      "operations"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": true,
+    "type": "object"
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "insert_columns",
+  "description": "Batch insert empty columns for multiple operations. Efficiently inserts columns in multiple locations in one operation.\nArgs:\n    operations: List of InsertColumnOperation objects for each insert operation.\nReturns:\n    Dictionary with status, message and details of each operation.",
+  "inputSchema": {
+    "$defs": {
+      "InsertColumnOperation": {
+        "properties": {
+          "position": {
+            "description": "Column index (0-based) where to insert",
+            "title": "Position",
+            "type": "integer"
+          },
+          "how_many": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 1,
+            "description": "Number of columns to insert (default 1)",
+            "title": "How Many"
+          },
+          "where": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "before",
+            "description": "Insert 'before' or 'after' the position (default 'before')",
+            "title": "Where"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Sheet name (optional, uses active sheet if not provided)",
+            "title": "Sheet Name"
+          }
+        },
+        "required": [
+          "position"
+        ],
+        "title": "InsertColumnOperation",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "operations": {
+        "items": {
+          "$ref": "#/$defs/InsertColumnOperation"
+        },
+        "title": "Operations",
+        "type": "array"
+      }
+    },
+    "required": [
+      "operations"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": true,
+    "type": "object"
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "delete_rows",
+  "description": "Batch delete rows for multiple operations. Efficiently deletes rows in multiple locations in one operation.\nArgs:\n    operations: List of DeleteRowOperation objects for each delete operation.\nReturns:\n    Dictionary with status, message and details of each operation.",
+  "inputSchema": {
+    "$defs": {
+      "DeleteRowOperation": {
+        "properties": {
+          "position": {
+            "description": "Row index (0-based) where to start deletion",
+            "title": "Position",
+            "type": "integer"
+          },
+          "how_many": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 1,
+            "description": "Number of rows to delete (default 1)",
+            "title": "How Many"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Sheet name (optional, uses active sheet if not provided)",
+            "title": "Sheet Name"
+          }
+        },
+        "required": [
+          "position"
+        ],
+        "title": "DeleteRowOperation",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "operations": {
+        "items": {
+          "$ref": "#/$defs/DeleteRowOperation"
+        },
+        "title": "Operations",
+        "type": "array"
+      }
+    },
+    "required": [
+      "operations"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": true,
+    "type": "object"
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "delete_columns",
+  "description": "Batch delete columns for multiple operations. Efficiently deletes columns in multiple locations in one operation.\nArgs:\n    operations: List of DeleteColumnOperation objects for each delete operation.\nReturns:\n    Dictionary with status, message and details of each operation.",
+  "inputSchema": {
+    "$defs": {
+      "DeleteColumnOperation": {
+        "properties": {
+          "position": {
+            "description": "Column index (0-based) where to start deletion",
+            "title": "Position",
+            "type": "integer"
+          },
+          "how_many": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 1,
+            "description": "Number of columns to delete (default 1)",
+            "title": "How Many"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Sheet name (optional, uses active sheet if not provided)",
+            "title": "Sheet Name"
+          }
+        },
+        "required": [
+          "position"
+        ],
+        "title": "DeleteColumnOperation",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "operations": {
+        "items": {
+          "$ref": "#/$defs/DeleteColumnOperation"
+        },
+        "title": "Operations",
+        "type": "array"
+      }
+    },
+    "required": [
+      "operations"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": true,
+    "type": "object"
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "create_sheet",
+  "description": "Batch create multiple new worksheets. Efficiently creates multiple sheets in one operation.\nArgs:\n    sheet_names: List of names for the new worksheets to create.\nReturns:\n    Dictionary with status, message and details of each operation.",
+  "inputSchema": {
+    "properties": {
+      "sheet_names": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Sheet Names",
+        "type": "array"
+      }
+    },
+    "required": [
+      "sheet_names"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": true,
+    "type": "object"
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "delete_sheet",
+  "description": "Batch delete multiple worksheets by names. Efficiently deletes multiple sheets in one operation.\nArgs:\n    sheet_names: List of names of the worksheets to delete.\nReturns:\n    Dictionary with status and message.",
+  "inputSchema": {
+    "properties": {
+      "sheet_names": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Sheet Names",
+        "type": "array"
+      }
+    },
+    "required": [
+      "sheet_names"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": true,
+    "type": "object"
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "rename_sheet",
+  "description": "Batch rename multiple worksheets. Efficiently renames multiple sheets in one operation.\nArgs:\n    operations: List of RenameSheetOperation objects for each rename operation.\nReturns:\n    Dictionary with status and message.",
+  "inputSchema": {
+    "$defs": {
+      "RenameSheetOperation": {
+        "properties": {
+          "old_name": {
+            "description": "Current sheet name to rename",
+            "title": "Old Name",
+            "type": "string"
+          },
+          "new_name": {
+            "description": "New name for the sheet",
+            "title": "New Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "old_name",
+          "new_name"
+        ],
+        "title": "RenameSheetOperation",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "operations": {
+        "items": {
+          "$ref": "#/$defs/RenameSheetOperation"
+        },
+        "title": "Operations",
+        "type": "array"
+      }
+    },
+    "required": [
+      "operations"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": true,
+    "type": "object"
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "activate_sheet",
+  "description": "Activate/switch to the worksheet with the given name.\nArgs:\n    sheet_name: Name of the worksheet to activate.\nReturns:\n    Operation description string.",
+  "inputSchema": {
+    "properties": {
+      "sheet_name": {
+        "title": "Sheet Name",
+        "type": "string"
+      }
+    },
+    "required": [
+      "sheet_name"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "title": "Result",
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "move_sheet",
+  "description": "Move a worksheet to the specified index (does not activate the sheet).\nArgs:\n    sheet_name: Name of the worksheet to move.\n    to_index: Target index (0-based). Can be integer or string representation of integer.\nReturns:\n    Operation description string.",
+  "inputSchema": {
+    "properties": {
+      "sheet_name": {
+        "title": "Sheet Name",
+        "type": "string"
+      },
+      "to_index": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          }
+        ],
+        "title": "To Index"
+      }
+    },
+    "required": [
+      "sheet_name",
+      "to_index"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "title": "Result",
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "set_sheet_display_status",
+  "description": "Batch show or hide multiple worksheets. Efficiently sets display status for multiple sheets in one operation.\nArgs:\n    operations: List of SheetDisplayStatusOperation objects for each display status operation.\nReturns:\n    Dictionary with status, message and details of each operation.",
+  "inputSchema": {
+    "$defs": {
+      "SheetDisplayStatusOperation": {
+        "properties": {
+          "sheet_name": {
+            "description": "Name of the sheet to modify display status",
+            "title": "Sheet Name",
+            "type": "string"
+          },
+          "visible": {
+            "description": "True to show sheet, False to hide sheet",
+            "title": "Visible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sheet_name",
+          "visible"
+        ],
+        "title": "SheetDisplayStatusOperation",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "operations": {
+        "items": {
+          "$ref": "#/$defs/SheetDisplayStatusOperation"
+        },
+        "title": "Operations",
+        "type": "array"
+      }
+    },
+    "required": [
+      "operations"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "additionalProperties": true,
+    "type": "object"
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "set_cell_dimensions",
+  "description": "Batch set column widths and row heights based on dimension requests.\nEach request can specify either width, height, or both.\nWidth applies to columns (A:C), height applies to rows (1:5).\nRange format examples:\n  - \"Sheet1!A:C\" sets width for columns A to C in Sheet1\n  - \"A:A\" sets width for column A in active sheet\n  - \"1:5\" sets height for rows 1 to 5 in active sheet\nWidth/height can be a single number (applies to all) or an array matching the count of columns/rows in range.\nReturns success/fail status and message with automatic dimension report of the processed ranges.\n\n**Special Auto-Fit Feature:**\n    - The calculation uses a minimum of 12pt per character to ensure readability.\n    - Example: If a cell contains the text \"Hello\", the minimum width will be calculated as 60pt (5 characters * 12pt).\n\nArgs:\n    requests: List of CellDimensionRequest\n    ctx: FastMCP context\nReturns:\n    dict: { status: 'success' | 'fail', message: str, report: list }",
+  "inputSchema": {
+    "$defs": {
+      "CellDimensionRequest": {
+        "description": "Request for setting cell dimensions (column width/row height).",
+        "properties": {
+          "range": {
+            "description": "A1 notation (e.g., 'Sheet1!A:C', 'A:A', '1:5')",
+            "title": "Range",
+            "type": "string"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Width in points (pt) for columns",
+            "title": "Width"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Height in points (pt) for rows",
+            "title": "Height"
+          }
+        },
+        "required": [
+          "range"
+        ],
+        "title": "CellDimensionRequest",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "requests": {
+        "items": {
+          "$ref": "#/$defs/CellDimensionRequest"
+        },
+        "title": "Requests",
+        "type": "array"
+      }
+    },
+    "required": [
+      "requests"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "title": "Result",
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "auto_fill",
+  "description": "Auto fill data from source range to target range using pattern detection.\nThe auto fill operation will also copy cell styles, formulas, and formatting from the source to the target range. You do NOT need to call format_brush after auto_fill.\nauto_fill only supports horizontal or vertical extension. The target_range must be aligned with the source_range (either same row or same column direction). \nIt is recommended to check the result after calling this tool to confirm the fill is as expected.\n\nArgs:\n    source_range: Source range in A1 notation (e.g., 'A1:A2', 'B1:C1')\n    target_range: Target range in A1 notation to fill (e.g., 'A1:A10', 'B1:F1')\n\nReturns:\n    Operation description string.\n\nExamples:\n    auto_fill('A1:A2', 'A1:A10')  # Fill down from A1:A2 pattern to A1:A10 (vertical)\n    auto_fill('A1:B1', 'A1:F1')   # Fill right from A1:B1 pattern to A1:F1 (horizontal)",
+  "inputSchema": {
+    "properties": {
+      "source_range": {
+        "title": "Source Range",
+        "type": "string"
+      },
+      "target_range": {
+        "title": "Target Range",
+        "type": "string"
+      }
+    },
+    "required": [
+      "source_range",
+      "target_range"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "title": "Result",
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "format_brush",
+  "description": "Copy formatting from source_range to target_range using Univer's format painter commands.\nInternally sets the format painter on the source, then applies to the target range.\nSupports single cell, range, and cross-sheet operations.\nExample usage:\n    format_brush('A1', 'B1:C1')\n    format_brush('A1:B2', 'D1:E2')\n    format_brush('Sheet1!A1', 'Sheet2!B1')\nArgs:\n    source_range: Source range in A1 notation, supports cross-sheet (e.g., Sheet1!A1)\n    target_range: Target range in A1 notation, supports cross-sheet\n    ctx: FastMCP context\nReturns:\n    Operation result description string.",
+  "inputSchema": {
+    "properties": {
+      "source_range": {
+        "title": "Source Range",
+        "type": "string"
+      },
+      "target_range": {
+        "title": "Target Range",
+        "type": "string"
+      }
+    },
+    "required": [
+      "source_range",
+      "target_range"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "title": "Result",
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "add_conditional_formatting_rule",
+  "description": "Add one or more conditional formatting rules to the given sheet.\nArgs:\n    sheet_name: Target sheet name\n    rules: List of ConditionalFormatRule (if rule_id is not provided, it will be generated)\nReturns:\n    Success message",
+  "inputSchema": {
+    "$defs": {
+      "ConditionalFormatRule": {
+        "additionalProperties": true,
+        "description": "Conditional formatting rule parameters:\n\nCommon fields:\n- rule_id: Optional[str] - Rule identifier\n- range: Optional[str] - Target range (A1 notation)\n- stop_if_true: Optional[bool]\n- priority: Optional[int] - -1: end, 0: top, >0: index\n\nRule type:\n- rule_type: Optional[str] - 'highlightCell' | 'dataBar' | 'colorScale'\n\nDataBar fields:\n- min_type, min_value, max_type, max_value: str/number\n- positive_color, native_color: str (hex color)\n- is_show_value, is_gradient, is_bottom, is_percent: bool\n\nColorScale fields:\n- points: List[dict] - Each dict: {index, color, value_type, value}\n    - value_type: 'num' | 'min' | 'max' | 'percent' | 'percentile' | 'formula'\n\nHighlightCell fields:\n- sub_type: str (see below)\n- operator: str (see below)\n- value: number | str | [number, number]\n- formula: str\n- style: dict (see below)\n\nHighlightCell sub_type:\n'uniqueValues', 'duplicateValues', 'rank', 'text', 'timePeriod', 'number', 'average', 'formula'\n\nHighlightCell operator:\n'beginsWith', 'endsWith', 'containsText', 'notContainsText', 'equal', 'notEqual', 'containsBlanks',\n'notContainsBlanks', 'containsErrors', 'notContainsErrors', 'today', 'yesterday', 'tomorrow',\n'last7Days', 'thisMonth', 'lastMonth', 'nextMonth', 'thisWeek', 'lastWeek', 'nextWeek',\n'greaterThan', 'greaterThanOrEqual', 'lessThan', 'lessThanOrEqual', 'notBetween', 'between'\n\nStyle dict:\n- fgColor: str (font color, e.g., \"#000000\")\n- bgColor: str (background color, e.g., \"#FF0000\")\n- bold: bool\n- italic: bool\n- underline: bool",
+        "properties": {},
+        "title": "ConditionalFormatRule",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "sheet_name": {
+        "title": "Sheet Name",
+        "type": "string"
+      },
+      "rules": {
+        "items": {
+          "$ref": "#/$defs/ConditionalFormatRule"
+        },
+        "title": "Rules",
+        "type": "array"
+      }
+    },
+    "required": [
+      "sheet_name",
+      "rules"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "title": "Result",
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "set_conditional_formatting_rule",
+  "description": "Set (replace) all conditional formatting rules for the given sheet.\nArgs:\n    sheet_name: Target sheet name\n    rules: List of ConditionalFormatRule with rule_id\nReturns:\n    Success message",
+  "inputSchema": {
+    "$defs": {
+      "ConditionalFormatRule": {
+        "additionalProperties": true,
+        "description": "Conditional formatting rule parameters:\n\nCommon fields:\n- rule_id: Optional[str] - Rule identifier\n- range: Optional[str] - Target range (A1 notation)\n- stop_if_true: Optional[bool]\n- priority: Optional[int] - -1: end, 0: top, >0: index\n\nRule type:\n- rule_type: Optional[str] - 'highlightCell' | 'dataBar' | 'colorScale'\n\nDataBar fields:\n- min_type, min_value, max_type, max_value: str/number\n- positive_color, native_color: str (hex color)\n- is_show_value, is_gradient, is_bottom, is_percent: bool\n\nColorScale fields:\n- points: List[dict] - Each dict: {index, color, value_type, value}\n    - value_type: 'num' | 'min' | 'max' | 'percent' | 'percentile' | 'formula'\n\nHighlightCell fields:\n- sub_type: str (see below)\n- operator: str (see below)\n- value: number | str | [number, number]\n- formula: str\n- style: dict (see below)\n\nHighlightCell sub_type:\n'uniqueValues', 'duplicateValues', 'rank', 'text', 'timePeriod', 'number', 'average', 'formula'\n\nHighlightCell operator:\n'beginsWith', 'endsWith', 'containsText', 'notContainsText', 'equal', 'notEqual', 'containsBlanks',\n'notContainsBlanks', 'containsErrors', 'notContainsErrors', 'today', 'yesterday', 'tomorrow',\n'last7Days', 'thisMonth', 'lastMonth', 'nextMonth', 'thisWeek', 'lastWeek', 'nextWeek',\n'greaterThan', 'greaterThanOrEqual', 'lessThan', 'lessThanOrEqual', 'notBetween', 'between'\n\nStyle dict:\n- fgColor: str (font color, e.g., \"#000000\")\n- bgColor: str (background color, e.g., \"#FF0000\")\n- bold: bool\n- italic: bool\n- underline: bool",
+        "properties": {},
+        "title": "ConditionalFormatRule",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "sheet_name": {
+        "title": "Sheet Name",
+        "type": "string"
+      },
+      "rules": {
+        "items": {
+          "$ref": "#/$defs/ConditionalFormatRule"
+        },
+        "title": "Rules",
+        "type": "array"
+      }
+    },
+    "required": [
+      "sheet_name",
+      "rules"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "title": "Result",
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "delete_conditional_formatting_rule",
+  "description": "Delete one or more conditional formatting rules by ID.\nArgs:\n    sheet_name: Target sheet name\n    rule_ids: List of conditional formatting rule IDs\nReturns:\n    Success message",
+  "inputSchema": {
+    "properties": {
+      "sheet_name": {
+        "title": "Sheet Name",
+        "type": "string"
+      },
+      "rule_ids": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Rule Ids",
+        "type": "array"
+      }
+    },
+    "required": [
+      "sheet_name",
+      "rule_ids"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "title": "Result",
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "get_conditional_formatting_rules",
+  "description": "Get all conditional formatting rules for the given sheet.\nArgs:\n    sheet_name: Target sheet name\nReturns:\n    List of rule",
+  "inputSchema": {
+    "properties": {
+      "sheet_name": {
+        "title": "Sheet Name",
+        "type": "string"
+      }
+    },
+    "required": [
+      "sheet_name"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "title": "Result",
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "add_data_validation_rule",
+  "description": "Add one or more data validation rules to the specified sheet.\nIt can also be used to specify the interaction between cells using date selector, drop-down, checkboxes, and so on\nArgs:\n    sheet_name: Target sheet name\n    rules: List of DataValidationRule (rule_id auto-generated if not provided)\nReturns:\n    Success message",
+  "inputSchema": {
+    "$defs": {
+      "DataValidationRule": {
+        "additionalProperties": true,
+        "description": "Data validation rule parameters:\n\nBasic fields:\n- rule_id: Optional[str] - Rule identifier, auto-generated if not provided\n- range_a1: str - Target range (A1 notation), multiple ranges separated by comma\n\nValidation type:\n- validation_type: str - Type of validation\n  \"list\": select from list\n  \"integer\": Integer validation\n  \"decimal\": Decimal validation\n  \"date\": Date control\n  \"text_length\": Text length validation\n  \"custom_formula\": Custom formula validation\n  \"checkbox\": Checkbox control\n\nOperator (Used in combination with integer, decimal, date, time, text_length, not required):\n- operator: str - Validation operator\n  Range: \"between\", \"notBetween\"\n  Single value: \"equal\", \"notEqual\", \"greaterThan\", \"greaterThanOrEqual\", \"lessThan\", \"lessThanOrEqual\"\n\nValue parameters:\n- value1: number | str - First value, required if operator is set\n- value2: number | str | None - Second value, only for \"between\" or \"notBetween\"\n\nList validation:\n- source: str - List source, comma-separated string or cell range\n- allow_multiple: bool - Allow multiple selection (default false)\n\nCustom formula validation:\n- custom_formula: str - Custom formula\n\nDate validation:\n- show_time: bool - Show time in date picker (default false)\n\nGeneral options:\n- ignore_blank: bool - (default true)\n- show_dropdown: bool - (default true)\n\nError handling:\n- show_error_message: bool - (default true)\n- error_style: str - (default \"stop\")\n  \"stop\": Stop input\n  \"warning\": Warning\n  \"information\": Information\n- error_title: str - (default \"\")\n- error_message: str - (default \"Invalid input\")\n\nInput prompt:\n- show_input_message: bool - (default true)\n- input_title: str - (default \"\")\n- input_message: str - Input prompt message (default empty)",
+        "properties": {},
+        "title": "DataValidationRule",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "sheet_name": {
+        "title": "Sheet Name",
+        "type": "string"
+      },
+      "rules": {
+        "items": {
+          "$ref": "#/$defs/DataValidationRule"
+        },
+        "title": "Rules",
+        "type": "array"
+      }
+    },
+    "required": [
+      "sheet_name",
+      "rules"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "title": "Result",
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "set_data_validation_rule",
+  "description": "Set (replace) all data validation rules for the specified sheet.\nArgs:\n    sheet_name: Target sheet name\n    rules: List of DataValidationRule with rule_id\nReturns:\n    Success message",
+  "inputSchema": {
+    "$defs": {
+      "DataValidationRule": {
+        "additionalProperties": true,
+        "description": "Data validation rule parameters:\n\nBasic fields:\n- rule_id: Optional[str] - Rule identifier, auto-generated if not provided\n- range_a1: str - Target range (A1 notation), multiple ranges separated by comma\n\nValidation type:\n- validation_type: str - Type of validation\n  \"list\": select from list\n  \"integer\": Integer validation\n  \"decimal\": Decimal validation\n  \"date\": Date control\n  \"text_length\": Text length validation\n  \"custom_formula\": Custom formula validation\n  \"checkbox\": Checkbox control\n\nOperator (Used in combination with integer, decimal, date, time, text_length, not required):\n- operator: str - Validation operator\n  Range: \"between\", \"notBetween\"\n  Single value: \"equal\", \"notEqual\", \"greaterThan\", \"greaterThanOrEqual\", \"lessThan\", \"lessThanOrEqual\"\n\nValue parameters:\n- value1: number | str - First value, required if operator is set\n- value2: number | str | None - Second value, only for \"between\" or \"notBetween\"\n\nList validation:\n- source: str - List source, comma-separated string or cell range\n- allow_multiple: bool - Allow multiple selection (default false)\n\nCustom formula validation:\n- custom_formula: str - Custom formula\n\nDate validation:\n- show_time: bool - Show time in date picker (default false)\n\nGeneral options:\n- ignore_blank: bool - (default true)\n- show_dropdown: bool - (default true)\n\nError handling:\n- show_error_message: bool - (default true)\n- error_style: str - (default \"stop\")\n  \"stop\": Stop input\n  \"warning\": Warning\n  \"information\": Information\n- error_title: str - (default \"\")\n- error_message: str - (default \"Invalid input\")\n\nInput prompt:\n- show_input_message: bool - (default true)\n- input_title: str - (default \"\")\n- input_message: str - Input prompt message (default empty)",
+        "properties": {},
+        "title": "DataValidationRule",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "sheet_name": {
+        "title": "Sheet Name",
+        "type": "string"
+      },
+      "rules": {
+        "items": {
+          "$ref": "#/$defs/DataValidationRule"
+        },
+        "title": "Rules",
+        "type": "array"
+      }
+    },
+    "required": [
+      "sheet_name",
+      "rules"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "title": "Result",
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "delete_data_validation_rule",
+  "description": "Delete one or more data validation rules by ID.\nArgs:\n    sheet_name: Target sheet name\n    rule_ids: List of data validation rule IDs\nReturns:\n    Success message",
+  "inputSchema": {
+    "properties": {
+      "sheet_name": {
+        "title": "Sheet Name",
+        "type": "string"
+      },
+      "rule_ids": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Rule Ids",
+        "type": "array"
+      }
+    },
+    "required": [
+      "sheet_name",
+      "rule_ids"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "title": "Result",
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
+{
+  "name": "get_data_validation_rules",
+  "description": "Get all data validation rules for the specified sheet.\nArgs:\n    sheet_name: Target sheet name\nReturns:\n    List of rules",
+  "inputSchema": {
+    "properties": {
+      "sheet_name": {
+        "title": "Sheet Name",
+        "type": "string"
+      }
+    },
+    "required": [
+      "sheet_name"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "properties": {
+      "result": {
+        "title": "Result",
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "title": "_WrappedResult",
+    "type": "object",
+    "x-fastmcp-wrap-result": true
+  },
+  "_meta": {
+    "_fastmcp": {
+      "tags": []
+    }
+  }
+}
