@@ -90,8 +90,14 @@ class UniverSheetsController:
         )
         logger.info("Connected to Univer Sheets successfully!")
         
-        # Load previous snapshot if available
-        await self.load_snapshot()
+        # Load previous snapshot if available, otherwise save default state
+        snapshot_loaded = await self.load_snapshot()
+        
+        if not snapshot_loaded:
+            # No snapshot exists, save the default Univer workbook state
+            logger.info("💾 Saving default Univer workbook state to snapshot...")
+            await self.save_snapshot()
+            logger.info("✅ Default workbook snapshot created!")
         
     async def execute_js(self, js_code: str) -> Any:
         """Execute JavaScript code in the Univer page context"""
