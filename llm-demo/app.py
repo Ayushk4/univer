@@ -62,7 +62,7 @@ def query():
             async def run_and_stream():
                 try:
                     # Use agent.iter() to get node-by-node execution
-                    async with agent.iter(prompt, deps=controller) as agent_run:
+                    async with agent.iter(prompt) as agent_run:
                         async for node in agent_run:
                             # Format each node as an event
                             events = format_node_to_events(node)
