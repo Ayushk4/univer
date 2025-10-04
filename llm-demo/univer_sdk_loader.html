@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Univer with Snapshot Sync</title>
+    
+    <!-- Univer Preset CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/@univerjs/preset-sheets-core/lib/index.css" />
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 1000;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+        }
+        
+        #loading h2 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        #loading p {
+            color: #666;
+            margin-bottom: 20px;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4285f4;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        #univer-container {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .update-notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #4caf50;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 10000;
+            animation: slideInRight 0.3s ease;
+        }
+        
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .error-box {
+            background: #f44336;
+            color: white;
+            padding: 20px;
+            margin: 20px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <h2>🚀 Loading Univer with Snapshot</h2>
+        <p>Initializing spreadsheet from saved state...</p>
+        <div class="spinner"></div>
+    </div>
+    
+    <div id="univer-container"></div>
+    
+    <!-- Socket.IO for real-time updates -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    
+    <!-- Required Dependencies -->
+    <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/rxjs@7.8.1/dist/bundles/rxjs.umd.min.js"></script>
+    
+    <!-- Univer Preset Mode (Recommended) -->
+    <script src="https://unpkg.com/@univerjs/presets/lib/umd/index.js"></script>
+    <script src="https://unpkg.com/@univerjs/preset-sheets-core/lib/umd/index.js"></script>
+    <script src="https://unpkg.com/@univerjs/preset-sheets-core/lib/umd/locales/en-US.js"></script>
+    
+    <script>
+        let univerAPI = null;
+        let currentWorkbookId = null;
+        
+        // WebSocket connection
+        const socket = io('http://localhost:5001', {
+            transports: ['websocket', 'polling']
+        });
+        
+        socket.on('connect', () => {
+            console.log('✅ WebSocket connected - live sync enabled');
+        });
+        
+        socket.on('snapshot_updated', async (snapshot) => {
+            console.log('📥 Received snapshot update via WebSocket');
+            showNotification('📥 Snapshot Updated', 'Reloading workbook...');
+            
+            // Reload workbook with new snapshot
+            await loadSnapshot(snapshot);
+        });
+        
+        socket.on('disconnect', () => {
+            console.log('⚠️  WebSocket disconnected');
+        });
+        
+        function showNotification(title, message) {
+            const notification = document.createElement('div');
+            notification.className = 'update-notification';
+            notification.innerHTML = `<strong>${title}</strong><br><small>${message}</small>`;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+        
+        function showError(message) {
+            const errorBox = document.createElement('div');
+            errorBox.className = 'error-box';
+            errorBox.innerHTML = `<strong>❌ Error:</strong> ${message}`;
+            document.getElementById('univer-container').appendChild(errorBox);
+        }
+        
+        async function initUniver() {
+            try {
+                console.log('🎯 Initializing Univer SDK (Preset Mode)...');
+                
+                // Check if Univer Preset is loaded
+                if (typeof UniverPresets === 'undefined') {
+                    throw new Error('Univer Presets not loaded. Check CDN links.');
+                }
+                
+                // Use Preset Mode (official recommended approach)
+                const { createUniver } = UniverPresets;
+                const { LocaleType, mergeLocales } = UniverCore;
+                const { UniverSheetsCorePreset } = UniverPresetSheetsCore;
+                
+                console.log('✅ Univer modules loaded successfully');
+                
+                // Create Univer instance using Preset Mode
+                const { univerAPI: api } = createUniver({
+                    locale: LocaleType.EN_US,
+                    locales: {
+                        [LocaleType.EN_US]: mergeLocales(UniverPresetSheetsCoreEnUS),
+                    },
+                    presets: [UniverSheetsCorePreset({
+                        container: 'univer-container',
+                    })],
+                });
+                
+                univerAPI = api;
+                
+                console.log('✅ Univer SDK initialized with Preset Mode');
+                
+                // Load snapshot
+                await fetchAndLoadSnapshot();
+                
+            } catch (error) {
+                console.error('❌ Failed to initialize Univer:', error);
+                document.getElementById('loading').innerHTML = `
+                    <h2>❌ Initialization Failed</h2>
+                    <p style="color: #f44336;">${error.message}</p>
+                    <p style="font-size: 12px; color: #666;">
+                        <strong>Fallback:</strong> Loading default Univer instance...
+                    </p>
+                `;
+                
+                // Fallback: Load default Univer via iframe
+                setTimeout(() => {
+                    document.getElementById('univer-container').innerHTML = `
+                        <iframe src="http://localhost:3002/sheets/" 
+                                style="width: 100%; height: 100%; border: none;">
+                        </iframe>
+                    `;
+                    document.getElementById('loading').style.display = 'none';
+                }, 2000);
+            }
+        }
+        
+        async function fetchAndLoadSnapshot() {
+            try {
+                console.log('📥 Fetching snapshot from server...');
+                const response = await fetch('http://localhost:5001/snapshot');
+                
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        console.log('ℹ️  No snapshot found, creating default workbook');
+                        await createDefaultWorkbook();
+                        return;
+                    }
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const snapshot = await response.json();
+                console.log('✅ Snapshot fetched:', snapshot);
+                
+                await loadSnapshot(snapshot);
+                
+            } catch (error) {
+                console.error('❌ Error fetching snapshot:', error);
+                console.log('ℹ️  Creating default workbook instead');
+                await createDefaultWorkbook();
+            }
+        }
+        
+        async function loadSnapshot(snapshot) {
+            try {
+                console.log('🔄 Loading workbook from snapshot...');
+                
+                // Dispose existing workbook using the correct API method
+                // Reference: https://docs.univer.ai/guides/sheets/features/core/sheets-api
+                if (currentWorkbookId && univerAPI) {
+                    try {
+                        console.log(`🗑️  Disposing existing workbook: ${currentWorkbookId}`);
+                        // Use univerAPI.disposeUnit(unitId) as per official docs
+                        univerAPI.disposeUnit(currentWorkbookId);
+                        console.log('✅ Old workbook disposed');
+                        currentWorkbookId = null;
+                    } catch (e) {
+                        console.warn('⚠️  Could not dispose existing workbook:', e);
+                    }
+                }
+                
+                // Check if the snapshot's workbook ID already exists and dispose it
+                if (snapshot && snapshot.id && univerAPI) {
+                    try {
+                        // Try to get workbook with snapshot ID
+                        const existingWorkbook = univerAPI.getWorkbook(snapshot.id);
+                        if (existingWorkbook) {
+                            console.log(`🗑️  Disposing duplicate workbook: ${snapshot.id}`);
+                            univerAPI.disposeUnit(snapshot.id);
+                            console.log('✅ Duplicate workbook disposed');
+                        }
+                    } catch (e) {
+                        // Normal if workbook doesn't exist yet
+                        console.log('ℹ️  No duplicate workbook to dispose');
+                    }
+                }
+                
+                // Small delay to ensure disposal completes
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                // Create workbook from snapshot
+                console.log('📝 Creating workbook from snapshot, ID:', snapshot.id);
+                currentWorkbookId = univerAPI.createWorkbook(snapshot);
+                
+                console.log('✅ Workbook loaded successfully, ID:', currentWorkbookId);
+                document.getElementById('loading').style.display = 'none';
+                showNotification('✅ Snapshot Loaded', 'Workbook updated successfully!');
+                
+            } catch (error) {
+                console.error('❌ Error loading snapshot:', error);
+                console.log('⚠️  Attempting to create default workbook...');
+                await createDefaultWorkbook();
+            }
+        }
+        
+        async function createDefaultWorkbook() {
+            try {
+                console.log('📄 Creating default workbook...');
+                
+                // Dispose any existing workbook first using correct API
+                if (currentWorkbookId && univerAPI) {
+                    try {
+                        univerAPI.disposeUnit(currentWorkbookId);
+                        currentWorkbookId = null;
+                    } catch (e) {
+                        console.warn('⚠️  Could not dispose workbook before creating default:', e);
+                    }
+                }
+                
+                // Create a simple workbook with default data
+                currentWorkbookId = univerAPI.createWorkbook({ 
+                    name: 'Default Workbook'
+                });
+                
+                console.log('✅ Default workbook created with ID:', currentWorkbookId);
+                document.getElementById('loading').style.display = 'none';
+                showNotification('ℹ️  Default Mode', 'No snapshot found, using default workbook');
+                
+            } catch (error) {
+                console.error('❌ Failed to create default workbook:', error);
+                document.getElementById('loading').innerHTML = `
+                    <h2>❌ Failed to Load</h2>
+                    <p style="color: #f44336;">${error.message}</p>
+                `;
+            }
+        }
+        
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            console.log('🚀 Page loaded, initializing Univer...');
+            initUniver();
+        });
+        
+        // Handle page errors
+        window.addEventListener('error', (event) => {
+            console.error('❌ Page error:', event.error);
+        });
+    </script>
+</body>
+</html>

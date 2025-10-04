@@ -328,7 +328,7 @@
     </head>
     <body>
         <div id="left-panel">
-            <iframe src="http://localhost:3002/sheets/" id="univerFrame"></iframe>
+            <iframe src="/univer_sdk_loader.html" id="univerFrame"></iframe>
         </div>
 
         <div id="right-panel">
@@ -356,6 +356,9 @@
         <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
         <script>
+            // Note: The iframe (univer_sdk_loader.html) handles WebSocket connection
+            // and real-time sync independently. No WebSocket needed in parent page.
+            
             const promptInput = document.getElementById('prompt');
             const submitBtn = document.getElementById('submit-btn');
             const outputArea = document.getElementById('output-area');

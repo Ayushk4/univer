@@ -38,9 +38,17 @@ Packages for Tool Calling & [Model Context Protocol (MCP)](https://modelcontextp
 ## 📋 Prerequisites
 
 1. **Node.js** >= 18.17.0
-2. **Python** >= 3.10
+2. **Python** >= 3.10 (✅ Python 3.12 supported!)
 3. **pnpm** package manager
 4. **Univer Sheets** instance running locally
+
+## ✨ What's New
+
+**🎉 Full Univer SDK Integration with Real-Time Sync!**
+
+The iframe now loads snapshot data directly using Univer SDK and syncs in real-time via WebSocket. Changes in the Playwright browser instantly appear in the web UI!
+
+See `UNIVER_SDK_SYNC_GUIDE.md` for complete details.
 
 ## 🚀 Quick Start (5 minutes)
 
@@ -90,6 +98,8 @@ python app.py
 ```
 
 ## 🛠️ Available Tools
+
+### Read Tools (5)
 
 | Tool | Description | Example |
 |------|-------------|---------|

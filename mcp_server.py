@@ -66,11 +66,13 @@ logger = logging.getLogger(__name__)
 class UniverSheetsController:
     """Controller for reading data from Univer Sheets via Playwright"""
     
-    def __init__(self):
+    def __init__(self, snapshot_lock=None):
         self.page: Optional[Page] = None
         self.browser: Optional[Browser] = None
         self.playwright = None
         self.univer_url = "http://localhost:3002/sheets/"
+        self.snapshot_file = "workbook_snapshot.json"  # Persistence file
+        self.snapshot_lock = snapshot_lock  # Optional lock for thread-safe file access
         
     async def start(self, url: str = "http://localhost:3002/sheets/", headless: bool = False):
         """Start browser and connect to Univer instance"""
@@ -88,6 +90,9 @@ class UniverSheetsController:
         )
         logger.info("Connected to Univer Sheets successfully!")
         
+        # Load previous snapshot if available
+        await self.load_snapshot()
+        
     async def execute_js(self, js_code: str) -> Any:
         """Execute JavaScript code in the Univer page context"""
         if not self.page:
@@ -100,6 +105,10 @@ class UniverSheetsController:
             raise RuntimeError("Browser not started.")
         screenshot = await self.page.screenshot()
         return base64.b64encode(screenshot).decode()
+    
+    async def stop(self):
+        """Stop browser and cleanup resources"""
+        await self.cleanup()
     
     async def cleanup(self):
         """Clean up browser resources"""
@@ -297,6 +306,97 @@ class UniverSheetsController:
         
         return await self.execute_js(js_code)
     
+    # ==================== Persistence Methods ====================
+    
+    async def save_snapshot(self) -> bool:
+        """Save current workbook state to JSON file"""
+        try:
+            js_code = """
+            (async () => {
+                const workbook = window.univerAPI.getActiveWorkbook();
+                const snapshot = workbook.getSnapshot();
+                
+                // Sanitize snapshot to make it valid JSON
+                // Replace Infinity with a large number, NaN with null
+                const sanitized = JSON.parse(
+                    JSON.stringify(snapshot, (key, value) => {
+                        if (value === Infinity) return 999999;
+                        if (value === -Infinity) return -999999;
+                        if (typeof value === 'number' && isNaN(value)) return null;
+                        return value;
+                    })
+                );
+                
+                return sanitized;
+            })()
+            """
+            snapshot = await self.execute_js(js_code)
+            
+            # Save to file with lock if provided
+            import os
+            snapshot_path = os.path.join(os.path.dirname(__file__), self.snapshot_file)
+            
+            if self.snapshot_lock:
+                # Thread-safe write with lock
+                with self.snapshot_lock:
+                    with open(snapshot_path, 'w') as f:
+                        json.dump(snapshot, f, indent=2)
+            else:
+                # Write without lock (for backward compatibility)
+                with open(snapshot_path, 'w') as f:
+                    json.dump(snapshot, f, indent=2)
+            
+            logger.info(f"✅ Snapshot saved to {self.snapshot_file}")
+            return True
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to save snapshot: {e}")
+            return False
+    
+    async def load_snapshot(self) -> bool:
+        """Load workbook state from JSON file"""
+        import os
+        snapshot_path = os.path.join(os.path.dirname(__file__), self.snapshot_file)
+        
+        if not os.path.exists(snapshot_path):
+            logger.info("ℹ️  No snapshot file found, using default state")
+            return False
+        
+        try:
+            with open(snapshot_path, 'r') as f:
+                snapshot = json.load(f)
+            
+            # Note: Univer's restore API may vary by version
+            # This attempts to restore the snapshot data
+            js_code = f"""
+            (async () => {{
+                try {{
+                    const snapshot = {json.dumps(snapshot)};
+                    const workbook = window.univerAPI.getActiveWorkbook();
+                    
+                    // Attempt to load snapshot
+                    // The exact API may vary - this is a best effort
+                    if (typeof workbook.loadSnapshot === 'function') {{
+                        await workbook.loadSnapshot(snapshot);
+                        return 'Loaded via loadSnapshot()';
+                    }} else {{
+                        // Fallback: Try to manually restore sheets
+                        console.log('loadSnapshot not available, snapshot not restored');
+                        return 'Snapshot load not supported by this Univer version';
+                    }}
+                }} catch (e) {{
+                    console.error('Snapshot load error:', e);
+                    return 'Error: ' + e.message;
+                }}
+            }})()
+            """
+            
+            result = await self.execute_js(js_code)
+            logger.info(f"📥 {result}")
+            return True
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to load snapshot: {e}")
+            return False
+    
     # ==================== Sheet Management Methods ====================
     
     async def create_sheet(self, sheet_names: list[str]) -> dict:
@@ -340,7 +440,9 @@ class UniverSheetsController:
             }};
         }})()
         """
-        return await self.execute_js(js_code)
+        result = await self.execute_js(js_code)
+        await self.save_snapshot()  # Auto-save after operation
+        return result
     
     async def delete_sheet(self, sheet_names: list[str]) -> dict:
         """Delete one or more worksheets by name
@@ -389,7 +491,9 @@ class UniverSheetsController:
             }};
         }})()
         """
-        return await self.execute_js(js_code)
+        result = await self.execute_js(js_code)
+        await self.save_snapshot()  # Auto-save after operation
+        return result
     
     async def rename_sheet(self, operations: list[dict]) -> dict:
         """Rename one or more worksheets
@@ -441,7 +545,9 @@ class UniverSheetsController:
             }};
         }})()
         """
-        return await self.execute_js(js_code)
+        result = await self.execute_js(js_code)
+        await self.save_snapshot()  # Auto-save after operation
+        return result
     
     async def activate_sheet(self, sheet_name: str) -> str:
         """Activate/switch to a specific worksheet
@@ -464,7 +570,9 @@ class UniverSheetsController:
             return 'Activated sheet: ' + sheetName;
         }})()
         """
-        return await self.execute_js(js_code)
+        result = await self.execute_js(js_code)
+        await self.save_snapshot()  # Auto-save after operation
+        return result
     
     async def move_sheet(self, sheet_name: str, to_index: int) -> str:
         """Move a worksheet to a specific index position
@@ -504,7 +612,9 @@ class UniverSheetsController:
             return 'Moved sheet "' + sheetName + '" from index ' + currentIndex + ' to {to_index}';
         }})()
         """
-        return await self.execute_js(js_code)
+        result = await self.execute_js(js_code)
+        await self.save_snapshot()  # Auto-save after operation
+        return result
     
     async def set_sheet_display_status(self, operations: list[dict]) -> dict:
         """Show or hide one or more worksheets
@@ -562,7 +672,9 @@ class UniverSheetsController:
             }};
         }})()
         """
-        return await self.execute_js(js_code)
+        result = await self.execute_js(js_code)
+        await self.save_snapshot()  # Auto-save after operation
+        return result
 
 
 # ==================== MCP Server Setup ====================
