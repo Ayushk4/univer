@@ -107,6 +107,85 @@ def register_tools(agent, controller):
         return result
 
 
+    @agent.tool
+    async def create_sheet(_ctx: RunContext, sheet_names: list[str]) -> dict:
+        """Create one or more new worksheets.
+        
+        Args:
+            sheet_names: List of names for the new sheets to create
+        
+        Returns a dict with status, message, and details of each operation.
+        """
+        result = await controller.create_sheet(sheet_names=sheet_names)
+        return result
+
+
+    @agent.tool
+    async def delete_sheet(_ctx: RunContext, sheet_names: list[str]) -> dict:
+        """Delete one or more worksheets by name. WARNING: Cannot be undone!
+        
+        Args:
+            sheet_names: List of sheet names to delete
+        
+        Returns a dict with status and message.
+        """
+        result = await controller.delete_sheet(sheet_names=sheet_names)
+        return result
+
+
+    @agent.tool
+    async def rename_sheet(_ctx: RunContext, operations: list[dict]) -> dict:
+        """Rename one or more worksheets.
+        
+        Args:
+            operations: List of dicts, each with 'old_name' and 'new_name' keys
+        
+        Example: [{"old_name": "Sheet1", "new_name": "Sales Data"}]
+        """
+        result = await controller.rename_sheet(operations=operations)
+        return result
+
+
+    @agent.tool
+    async def activate_sheet(_ctx: RunContext, sheet_name: str) -> str:
+        """Activate/switch to a specific worksheet by name.
+        
+        Args:
+            sheet_name: Name of the sheet to activate
+        
+        Returns a success message.
+        """
+        result = await controller.activate_sheet(sheet_name=sheet_name)
+        return result
+
+
+    @agent.tool
+    async def move_sheet(_ctx: RunContext, sheet_name: str, to_index: int) -> str:
+        """Move a worksheet to a specific position (0-based index).
+        
+        Args:
+            sheet_name: Name of the sheet to move
+            to_index: Target index position (0-based)
+        
+        Returns a success message.
+        """
+        result = await controller.move_sheet(sheet_name=sheet_name, to_index=to_index)
+        return result
+
+
+    @agent.tool
+    async def set_sheet_display_status(_ctx: RunContext, operations: list[dict]) -> dict:
+        """Show or hide one or more worksheets.
+        
+        Args:
+            operations: List of dicts, each with 'sheet_name' and 'visible' (bool) keys
+        
+        Example: [{"sheet_name": "Sheet1", "visible": False}]
+        """
+        result = await controller.set_sheet_display_status(operations=operations)
+        return result
+
+
 async def run_query(agent, controller, prompt: str):
     """
     Run a query against the spreadsheet using the agent.

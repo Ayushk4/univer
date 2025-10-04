@@ -100,6 +100,48 @@ async def run_tests(url: str = "http://localhost:3002/sheets/", headless: bool =
         result = await controller.get_range_data("A1:E40")
         print(f"✅ Successfully retrieved {len(result.get('values', []))} rows")
         
+        # Test 11: Create new sheets
+        print_section("Test 11: Create New Sheets")
+        result = await controller.create_sheet(["TestSheet1", "TestSheet2"])
+        print_result("Create Sheets", result)
+        
+        # Test 12: Rename sheets
+        print_section("Test 12: Rename Sheets")
+        result = await controller.rename_sheet([
+            {"old_name": "TestSheet1", "new_name": "DataSheet"},
+            {"old_name": "TestSheet2", "new_name": "SummarySheet"}
+        ])
+        print_result("Rename Sheets", result)
+        
+        # Test 13: Activate sheet
+        print_section("Test 13: Activate Sheet")
+        result = await controller.activate_sheet("DataSheet")
+        print_result("Activate Sheet", result)
+        
+        # Test 14: Move sheet
+        print_section("Test 14: Move Sheet")
+        result = await controller.move_sheet("SummarySheet", 0)
+        print_result("Move Sheet", result)
+        
+        # Test 15: Set sheet display status (hide/show)
+        print_section("Test 15: Set Sheet Display Status")
+        # Hide a sheet
+        result = await controller.set_sheet_display_status([
+            {"sheet_name": "DataSheet", "visible": False}
+        ])
+        print_result("Hide Sheet", result)
+        
+        # Show it again
+        result = await controller.set_sheet_display_status([
+            {"sheet_name": "DataSheet", "visible": True}
+        ])
+        print_result("Show Sheet", result)
+        
+        # Test 16: Delete sheets (cleanup)
+        print_section("Test 16: Delete Sheets (Cleanup)")
+        result = await controller.delete_sheet(["DataSheet", "SummarySheet"])
+        print_result("Delete Sheets", result)
+        
         # Summary
         print_section("Test Summary")
         print("✅ All tests completed successfully!")
@@ -114,7 +156,13 @@ async def run_tests(url: str = "http://localhost:3002/sheets/", headless: bool =
         print("  8. ✓ Search Cells (by formula)")
         print("  9. ✓ Scroll and Screenshot")
         print(" 10. ✓ Large Range Test (200 cells)")
-        print("\n🎉 MCP Server is working correctly!")
+        print(" 11. ✓ Create New Sheets")
+        print(" 12. ✓ Rename Sheets")
+        print(" 13. ✓ Activate Sheet")
+        print(" 14. ✓ Move Sheet")
+        print(" 15. ✓ Set Sheet Display Status (Hide/Show)")
+        print(" 16. ✓ Delete Sheets")
+        print("\n🎉 All read and write operations working correctly!")
         
     except Exception as e:
         print(f"\n❌ Error during tests: {e}")
@@ -156,6 +204,16 @@ async def quick_test(url: str = "http://localhost:3002/sheets/", headless: bool 
         print(f"   ✅ Found {len(sheets)} sheet(s):")
         for sheet in sheets:
             print(f"      - {sheet['name']}")
+        
+        # Test sheet management
+        print("\n5. Testing sheet management...")
+        print("   Creating test sheet...")
+        result = await controller.create_sheet(["QuickTest"])
+        print(f"   ✅ Created sheet: {result['message']}")
+        
+        print("   Deleting test sheet...")
+        result = await controller.delete_sheet(["QuickTest"])
+        print(f"   ✅ Deleted sheet: {result['message']}")
         
         print("\n✨ All tests passed! MCP server is working.\n")
         

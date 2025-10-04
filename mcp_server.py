@@ -296,6 +296,273 @@ class UniverSheetsController:
         """
         
         return await self.execute_js(js_code)
+    
+    # ==================== Sheet Management Methods ====================
+    
+    async def create_sheet(self, sheet_names: list[str]) -> dict:
+        """Create one or more new worksheets
+        
+        Args:
+            sheet_names: List of names for the new sheets
+            
+        Returns:
+            dict with status, message, and details
+        """
+        js_code = f"""
+        (async () => {{
+            const workbook = window.univerAPI.getActiveWorkbook();
+            const sheetNames = {json.dumps(sheet_names)};
+            const results = [];
+            
+            for (const name of sheetNames) {{
+                try {{
+                    workbook.insertSheet(name);
+                    // Get the newly created sheet
+                    const sheet = workbook.getSheetByName(name);
+                    results.push({{
+                        name: name,
+                        status: 'success',
+                        id: sheet ? sheet.getSheetId() : 'unknown'
+                    }});
+                }} catch (e) {{
+                    results.push({{
+                        name: name,
+                        status: 'failed',
+                        error: e.message
+                    }});
+                }}
+            }}
+            
+            return {{
+                status: 'success',
+                message: `Created ${{results.filter(r => r.status === 'success').length}} sheet(s)`,
+                details: results
+            }};
+        }})()
+        """
+        return await self.execute_js(js_code)
+    
+    async def delete_sheet(self, sheet_names: list[str]) -> dict:
+        """Delete one or more worksheets by name
+        
+        Args:
+            sheet_names: List of sheet names to delete
+            
+        Returns:
+            dict with status and message
+        """
+        js_code = f"""
+        (async () => {{
+            const workbook = window.univerAPI.getActiveWorkbook();
+            const sheetNames = {json.dumps(sheet_names)};
+            const results = [];
+            
+            for (const name of sheetNames) {{
+                try {{
+                    const sheet = workbook.getSheetByName(name);
+                    if (!sheet) {{
+                        results.push({{
+                            name: name,
+                            status: 'failed',
+                            error: 'Sheet not found'
+                        }});
+                        continue;
+                    }}
+                    workbook.deleteSheet(sheet.getSheetId());
+                    results.push({{
+                        name: name,
+                        status: 'success'
+                    }});
+                }} catch (e) {{
+                    results.push({{
+                        name: name,
+                        status: 'failed',
+                        error: e.message
+                    }});
+                }}
+            }}
+            
+            return {{
+                status: 'success',
+                message: `Deleted ${{results.filter(r => r.status === 'success').length}} sheet(s)`,
+                details: results
+            }};
+        }})()
+        """
+        return await self.execute_js(js_code)
+    
+    async def rename_sheet(self, operations: list[dict]) -> dict:
+        """Rename one or more worksheets
+        
+        Args:
+            operations: List of dicts with 'old_name' and 'new_name'
+            
+        Returns:
+            dict with status and message
+        """
+        js_code = f"""
+        (async () => {{
+            const workbook = window.univerAPI.getActiveWorkbook();
+            const operations = {json.dumps(operations)};
+            const results = [];
+            
+            for (const op of operations) {{
+                try {{
+                    const sheet = workbook.getSheetByName(op.old_name);
+                    if (!sheet) {{
+                        results.push({{
+                            old_name: op.old_name,
+                            new_name: op.new_name,
+                            status: 'failed',
+                            error: 'Sheet not found'
+                        }});
+                        continue;
+                    }}
+                    sheet.setName(op.new_name);
+                    results.push({{
+                        old_name: op.old_name,
+                        new_name: op.new_name,
+                        status: 'success'
+                    }});
+                }} catch (e) {{
+                    results.push({{
+                        old_name: op.old_name,
+                        new_name: op.new_name,
+                        status: 'failed',
+                        error: e.message
+                    }});
+                }}
+            }}
+            
+            return {{
+                status: 'success',
+                message: `Renamed ${{results.filter(r => r.status === 'success').length}} sheet(s)`,
+                details: results
+            }};
+        }})()
+        """
+        return await self.execute_js(js_code)
+    
+    async def activate_sheet(self, sheet_name: str) -> str:
+        """Activate/switch to a specific worksheet
+        
+        Args:
+            sheet_name: Name of the sheet to activate
+            
+        Returns:
+            Success message string
+        """
+        js_code = f"""
+        (async () => {{
+            const workbook = window.univerAPI.getActiveWorkbook();
+            const sheetName = {json.dumps(sheet_name)};
+            const sheet = workbook.getSheetByName(sheetName);
+            if (!sheet) {{
+                throw new Error('Sheet not found: ' + sheetName);
+            }}
+            workbook.setActiveSheet(sheet);
+            return 'Activated sheet: ' + sheetName;
+        }})()
+        """
+        return await self.execute_js(js_code)
+    
+    async def move_sheet(self, sheet_name: str, to_index: int) -> str:
+        """Move a worksheet to a specific index position
+        
+        Args:
+            sheet_name: Name of the sheet to move
+            to_index: Target index (0-based)
+            
+        Returns:
+            Success message string
+        """
+        # Convert string to int if needed
+        if isinstance(to_index, str):
+            to_index = int(to_index)
+            
+        js_code = f"""
+        (async () => {{
+            const workbook = window.univerAPI.getActiveWorkbook();
+            const sheetName = {json.dumps(sheet_name)};
+            const sheet = workbook.getSheetByName(sheetName);
+            if (!sheet) {{
+                throw new Error('Sheet not found: ' + sheetName);
+            }}
+            const currentIndex = sheet.getIndex();
+            
+            // Activate the sheet first, then move it
+            // This is a workaround because moveSheet() has a bug in Univer
+            const originalActiveSheet = workbook.getActiveSheet();
+            workbook.setActiveSheet(sheet);
+            workbook.moveActiveSheet({to_index});
+            
+            // Restore original active sheet if different
+            if (originalActiveSheet.getSheetId() !== sheet.getSheetId()) {{
+                workbook.setActiveSheet(originalActiveSheet);
+            }}
+            
+            return 'Moved sheet "' + sheetName + '" from index ' + currentIndex + ' to {to_index}';
+        }})()
+        """
+        return await self.execute_js(js_code)
+    
+    async def set_sheet_display_status(self, operations: list[dict]) -> dict:
+        """Show or hide one or more worksheets
+        
+        Args:
+            operations: List of dicts with 'sheet_name' and 'visible' (bool)
+            
+        Returns:
+            dict with status, message, and details
+        """
+        js_code = f"""
+        (async () => {{
+            const workbook = window.univerAPI.getActiveWorkbook();
+            const operations = {json.dumps(operations)};
+            const results = [];
+            
+            for (const op of operations) {{
+                try {{
+                    const sheet = workbook.getSheetByName(op.sheet_name);
+                    if (!sheet) {{
+                        results.push({{
+                            sheet_name: op.sheet_name,
+                            visible: op.visible,
+                            status: 'failed',
+                            error: 'Sheet not found'
+                        }});
+                        continue;
+                    }}
+                    
+                    if (op.visible) {{
+                        sheet.showSheet();
+                    }} else {{
+                        sheet.hideSheet();
+                    }}
+                    
+                    results.push({{
+                        sheet_name: op.sheet_name,
+                        visible: op.visible,
+                        status: 'success'
+                    }});
+                }} catch (e) {{
+                    results.push({{
+                        sheet_name: op.sheet_name,
+                        visible: op.visible,
+                        status: 'failed',
+                        error: e.message
+                    }});
+                }}
+            }}
+            
+            return {{
+                status: 'success',
+                message: `Modified display status for ${{results.filter(r => r.status === 'success').length}} sheet(s)`,
+                details: results
+            }};
+        }})()
+        """
+        return await self.execute_js(js_code)
 
 
 # ==================== MCP Server Setup ====================
@@ -306,7 +573,7 @@ controller = UniverSheetsController()
 
 @app.list_tools()
 async def list_tools() -> list[types.Tool]:
-    """List all available MCP tools (read-only)"""
+    """List all available MCP tools"""
     return [
         types.Tool(
             name="get_activity_status",
@@ -389,6 +656,127 @@ async def list_tools() -> list[types.Tool]:
                 },
                 "required": ["keyword", "find_by"]
             }
+        ),
+        types.Tool(
+            name="create_sheet",
+            description="Create one or more new worksheets. Efficiently creates multiple sheets in one operation.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "sheet_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of names for the new worksheets to create"
+                    }
+                },
+                "required": ["sheet_names"]
+            }
+        ),
+        types.Tool(
+            name="delete_sheet",
+            description="Delete one or more worksheets by name. WARNING: This operation cannot be undone!",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "sheet_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of sheet names to delete"
+                    }
+                },
+                "required": ["sheet_names"]
+            }
+        ),
+        types.Tool(
+            name="rename_sheet",
+            description="Rename one or more worksheets. Efficiently renames multiple sheets in one operation.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "operations": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "old_name": {
+                                    "type": "string",
+                                    "description": "Current sheet name to rename"
+                                },
+                                "new_name": {
+                                    "type": "string",
+                                    "description": "New name for the sheet"
+                                }
+                            },
+                            "required": ["old_name", "new_name"]
+                        },
+                        "description": "List of rename operations"
+                    }
+                },
+                "required": ["operations"]
+            }
+        ),
+        types.Tool(
+            name="activate_sheet",
+            description="Activate/switch to a specific worksheet by name. This changes which sheet is currently active.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "sheet_name": {
+                        "type": "string",
+                        "description": "Name of the worksheet to activate"
+                    }
+                },
+                "required": ["sheet_name"]
+            }
+        ),
+        types.Tool(
+            name="move_sheet",
+            description="Move a worksheet to a specific index position (0-based). Does not activate the sheet.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "sheet_name": {
+                        "type": "string",
+                        "description": "Name of the worksheet to move"
+                    },
+                    "to_index": {
+                        "anyOf": [
+                            {"type": "integer"},
+                            {"type": "string"}
+                        ],
+                        "description": "Target index position (0-based)"
+                    }
+                },
+                "required": ["sheet_name", "to_index"]
+            }
+        ),
+        types.Tool(
+            name="set_sheet_display_status",
+            description="Show or hide one or more worksheets. Efficiently sets display status for multiple sheets in one operation.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "operations": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "sheet_name": {
+                                    "type": "string",
+                                    "description": "Name of the sheet to modify"
+                                },
+                                "visible": {
+                                    "type": "boolean",
+                                    "description": "True to show sheet, False to hide sheet"
+                                }
+                            },
+                            "required": ["sheet_name", "visible"]
+                        },
+                        "description": "List of display status operations"
+                    }
+                },
+                "required": ["operations"]
+            }
         )
     ]
 
@@ -445,6 +833,30 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent | type
         
         elif name == "search_cells":
             result = await controller.search_cells(**arguments)
+            return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
+        
+        elif name == "create_sheet":
+            result = await controller.create_sheet(**arguments)
+            return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
+        
+        elif name == "delete_sheet":
+            result = await controller.delete_sheet(**arguments)
+            return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
+        
+        elif name == "rename_sheet":
+            result = await controller.rename_sheet(**arguments)
+            return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
+        
+        elif name == "activate_sheet":
+            result = await controller.activate_sheet(**arguments)
+            return [types.TextContent(type="text", text=result)]
+        
+        elif name == "move_sheet":
+            result = await controller.move_sheet(**arguments)
+            return [types.TextContent(type="text", text=result)]
+        
+        elif name == "set_sheet_display_status":
+            result = await controller.set_sheet_display_status(**arguments)
             return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
         
         else:

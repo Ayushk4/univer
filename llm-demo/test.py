@@ -112,6 +112,10 @@ def main():
     try:
         # Run test
         success = test_sse(prompt)
+        if(success):
+            print("✅ Test passed")
+        else:
+            print("❌ Test failed")
         return 0 if success else 1
     finally:
         print("\n🛑 Stopping server...")
