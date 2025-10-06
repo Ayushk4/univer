@@ -433,41 +433,73 @@ class UniverSheetsController:
         Returns:
             dict with status, message, and details
         """
-        js_code = f"""
-        (async () => {{
-            const workbook = window.univerAPI.getActiveWorkbook();
-            const sheetNames = {json.dumps(sheet_names)};
-            const results = [];
-            
-            for (const name of sheetNames) {{
-                try {{
-                    workbook.insertSheet(name);
-                    // Get the newly created sheet
-                    const sheet = workbook.getSheetByName(name);
-                    results.push({{
-                        name: name,
-                        status: 'success',
-                        id: sheet ? sheet.getSheetId() : 'unknown'
-                    }});
-                }} catch (e) {{
-                    results.push({{
-                        name: name,
-                        status: 'failed',
-                        error: e.message
-                    }});
+        start_time = time.time()
+        
+        try:
+            js_code = f"""
+            (async () => {{
+                const workbook = window.univerAPI.getActiveWorkbook();
+                const sheetNames = {json.dumps(sheet_names)};
+                const results = [];
+                
+                for (const name of sheetNames) {{
+                    try {{
+                        workbook.insertSheet(name);
+                        // Get the newly created sheet
+                        const sheet = workbook.getSheetByName(name);
+                        results.push({{
+                            name: name,
+                            status: 'success',
+                            id: sheet ? sheet.getSheetId() : 'unknown'
+                        }});
+                    }} catch (e) {{
+                        results.push({{
+                            name: name,
+                            status: 'failed',
+                            error: e.message
+                        }});
+                    }}
                 }}
-            }}
+                
+                return {{
+                    status: 'success',
+                    message: `Created ${{results.filter(r => r.status === 'success').length}} sheet(s)`,
+                    details: results
+                }};
+            }})()
+            """
+            result = await self.execute_js(js_code)
+            await self.save_snapshot()  # Auto-save after operation
             
-            return {{
-                status: 'success',
-                message: `Created ${{results.filter(r => r.status === 'success').length}} sheet(s)`,
-                details: results
-            }};
-        }})()
-        """
-        result = await self.execute_js(js_code)
-        await self.save_snapshot()  # Auto-save after operation
-        return result
+            # AUDIT LOG
+            duration_ms = (time.time() - start_time) * 1000
+            success_count = len([r for r in result['details'] if r['status'] == 'success'])
+            audit_logger.info(
+                f"Created {success_count} sheet(s): {', '.join(sheet_names)}",
+                extra={
+                    'user_action': 'create_sheet',
+                    'operation': 'create_sheet',
+                    'sheet_name': ', '.join(sheet_names),
+                    'result': 'success' if success_count > 0 else 'failed',
+                    'duration_ms': round(duration_ms, 2)
+                }
+            )
+            
+            return result
+            
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
+            logger.error(f"Failed to create sheets: {e}", exc_info=True)
+            audit_logger.error(
+                f"Failed to create sheets: {str(e)}",
+                extra={
+                    'user_action': 'create_sheet',
+                    'operation': 'create_sheet',
+                    'result': 'failed',
+                    'duration_ms': round(duration_ms, 2)
+                }
+            )
+            raise
     
     async def delete_sheet(self, sheet_names: list[str]) -> dict:
         """Delete one or more worksheets by name
@@ -478,47 +510,79 @@ class UniverSheetsController:
         Returns:
             dict with status and message
         """
-        js_code = f"""
-        (async () => {{
-            const workbook = window.univerAPI.getActiveWorkbook();
-            const sheetNames = {json.dumps(sheet_names)};
-            const results = [];
-            
-            for (const name of sheetNames) {{
-                try {{
-                    const sheet = workbook.getSheetByName(name);
-                    if (!sheet) {{
+        start_time = time.time()
+        
+        try:
+            js_code = f"""
+            (async () => {{
+                const workbook = window.univerAPI.getActiveWorkbook();
+                const sheetNames = {json.dumps(sheet_names)};
+                const results = [];
+                
+                for (const name of sheetNames) {{
+                    try {{
+                        const sheet = workbook.getSheetByName(name);
+                        if (!sheet) {{
+                            results.push({{
+                                name: name,
+                                status: 'failed',
+                                error: 'Sheet not found'
+                            }});
+                            continue;
+                        }}
+                        workbook.deleteSheet(sheet.getSheetId());
+                        results.push({{
+                            name: name,
+                            status: 'success'
+                        }});
+                    }} catch (e) {{
                         results.push({{
                             name: name,
                             status: 'failed',
-                            error: 'Sheet not found'
+                            error: e.message
                         }});
-                        continue;
                     }}
-                    workbook.deleteSheet(sheet.getSheetId());
-                    results.push({{
-                        name: name,
-                        status: 'success'
-                    }});
-                }} catch (e) {{
-                    results.push({{
-                        name: name,
-                        status: 'failed',
-                        error: e.message
-                    }});
                 }}
-            }}
+                
+                return {{
+                    status: 'success',
+                    message: `Deleted ${{results.filter(r => r.status === 'success').length}} sheet(s)`,
+                    details: results
+                }};
+            }})()
+            """
+            result = await self.execute_js(js_code)
+            await self.save_snapshot()  # Auto-save after operation
             
-            return {{
-                status: 'success',
-                message: `Deleted ${{results.filter(r => r.status === 'success').length}} sheet(s)`,
-                details: results
-            }};
-        }})()
-        """
-        result = await self.execute_js(js_code)
-        await self.save_snapshot()  # Auto-save after operation
-        return result
+            # AUDIT LOG
+            duration_ms = (time.time() - start_time) * 1000
+            success_count = len([r for r in result['details'] if r['status'] == 'success'])
+            audit_logger.info(
+                f"Deleted {success_count} sheet(s): {', '.join(sheet_names)}",
+                extra={
+                    'user_action': 'delete_sheet',
+                    'operation': 'delete_sheet',
+                    'sheet_name': ', '.join(sheet_names),
+                    'result': 'success' if success_count > 0 else 'failed',
+                    'duration_ms': round(duration_ms, 2)
+                }
+            )
+            
+            return result
+            
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
+            logger.error(f"Failed to delete sheets: {e}", exc_info=True)
+            audit_logger.error(
+                f"Failed to delete sheets: {str(e)}",
+                extra={
+                    'user_action': 'delete_sheet',
+                    'operation': 'delete_sheet',
+                    'result': 'failed',
+                    'duration_ms': round(duration_ms, 2)
+                }
+            )
+            raise
     
     async def rename_sheet(self, operations: list[dict]) -> dict:
         """Rename one or more worksheets
@@ -721,40 +785,72 @@ class UniverSheetsController:
             [{"range": "A1:B1", "value": ["A1", "B1"]}]
             [{"range": "A1:B2", "value": [["A1", "B1"], ["A2", "B2"]]}]
         """
-        js_code = f"""
-        (async () => {{
-            const workbook = window.univerAPI.getActiveWorkbook();
-            const sheet = workbook.getActiveSheet();
-            const items = {json.dumps(items)};
-            
-            for (const item of items) {{
-                try {{
-                    const range = sheet.getRange(item.range);
-                    const value = item.value;
-                    
-                    if (typeof value === 'string' && value.startsWith('=')) {{
-                        // Formula
-                        range.setFormula(value);
-                    }} else if (Array.isArray(value)) {{
-                        // Array of values (1D or 2D)
-                        range.setValues(value);
-                    }} else {{
-                        // Single value
-                        range.setValue(value);
-                    }}
-                }} catch (e) {{
-                    console.error(`Error setting range ${{item.range}}:`, e);
-                    throw e;
-                }}
-            }}
-            
-            return 'Successfully set data for ' + items.length + ' range(s)';
-        }})()
-        """
+        start_time = time.time()
         
-        result = await self.execute_js(js_code)
-        await self.save_snapshot()  # Auto-save after operation
-        return result
+        try:
+            js_code = f"""
+            (async () => {{
+                const workbook = window.univerAPI.getActiveWorkbook();
+                const sheet = workbook.getActiveSheet();
+                const items = {json.dumps(items)};
+                
+                for (const item of items) {{
+                    try {{
+                        const range = sheet.getRange(item.range);
+                        const value = item.value;
+                        
+                        if (typeof value === 'string' && value.startsWith('=')) {{
+                            // Formula
+                            range.setFormula(value);
+                        }} else if (Array.isArray(value)) {{
+                            // Array of values (1D or 2D)
+                            range.setValues(value);
+                        }} else {{
+                            // Single value
+                            range.setValue(value);
+                        }}
+                    }} catch (e) {{
+                        console.error(`Error setting range ${{item.range}}:`, e);
+                        throw e;
+                    }}
+                }}
+                
+                return 'Successfully set data for ' + items.length + ' range(s)';
+            }})()
+            """
+            
+            result = await self.execute_js(js_code)
+            await self.save_snapshot()  # Auto-save after operation
+            
+            # AUDIT LOG: Successful operation
+            duration_ms = (time.time() - start_time) * 1000
+            audit_logger.info(
+                f"Data written to {len(items)} range(s)",
+                extra={
+                    'user_action': 'write_data',
+                    'operation': 'set_range_data',
+                    'cell_range': ', '.join([item['range'] for item in items[:5]]) + ('...' if len(items) > 5 else ''),
+                    'result': 'success',
+                    'duration_ms': round(duration_ms, 2)
+                }
+            )
+            
+            return result
+            
+        except Exception as e:
+            # ERROR + AUDIT LOG
+            duration_ms = (time.time() - start_time) * 1000
+            logger.error(f"Failed to set range data: {e}", exc_info=True)
+            audit_logger.error(
+                f"Failed to write data: {str(e)}",
+                extra={
+                    'user_action': 'write_data',
+                    'operation': 'set_range_data',
+                    'result': 'failed',
+                    'duration_ms': round(duration_ms, 2)
+                }
+            )
+            raise
     
     async def set_range_style(self, items: list[dict]) -> str:
         """Set cell styles for multiple ranges

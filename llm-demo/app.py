@@ -11,11 +11,25 @@ import json
 import os
 import sys
 import threading
+import time
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pydantic_agent import create_agent, register_tools
+
+# Import logging configuration
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+try:
+    from logging_config import audit_logger, setup_logging
+    setup_logging()
+    import logging
+    logger = logging.getLogger(__name__)
+except ImportError:
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    audit_logger = logger
 
 app = Flask(__name__)
 CORS(app)
@@ -91,6 +105,9 @@ def univer_sdk_loader():
 @app.route('/query', methods=['POST'])
 def query():
     """Handle queries with streaming SSE response"""
+    start_time = time.time()
+    prompt = None
+    
     try:
         data = request.get_json()
         # Support both direct prompt and AG-UI message format
@@ -103,8 +120,19 @@ def query():
         
         if not prompt:
             return jsonify({'error': 'Empty prompt'}), 400
+        
+        # AUDIT: Log incoming query
+        audit_logger.info(
+            f"Query received: {prompt[:100]}{'...' if len(prompt) > 100 else ''}",
+            extra={
+                'user_action': 'query',
+                'operation': 'ai_query',
+                'result': 'processing'
+            }
+        )
             
     except Exception as e:
+        logger.error(f"Invalid request: {e}", exc_info=True)
         return jsonify({'error': f'Invalid request: {str(e)}'}), 400
     
     def generate():
@@ -133,7 +161,6 @@ def query():
             future = asyncio.run_coroutine_threadsafe(run_and_stream(), event_loop)
             
             # Stream results
-            import time
             while True:
                 try:
                     msg_type, data = result_queue.get(timeout=2.0)
@@ -141,7 +168,18 @@ def query():
                         # Send as SSE
                         yield f"data: {json.dumps(data)}\n\n"
                     elif msg_type == 'done':
+                        # AUDIT LOG: Query completed successfully
+                        duration_ms = (time.time() - start_time) * 1000
                         print("✅ Stream completed\n")
+                        audit_logger.info(
+                            "Query completed successfully",
+                            extra={
+                                'user_action': 'query',
+                                'operation': 'ai_query',
+                                'result': 'success',
+                                'duration_ms': round(duration_ms, 2)
+                            }
+                        )
                         break
                     elif msg_type == 'error':
                         raise data
@@ -150,9 +188,18 @@ def query():
                     yield f": keepalive {time.time()}\n\n"
                 
         except Exception as e:
-            print(f"❌ Error: {e}")
-            import traceback
-            traceback.print_exc()
+            # ERROR + AUDIT LOG
+            duration_ms = (time.time() - start_time) * 1000
+            logger.error(f"Query error: {e}", exc_info=True)
+            audit_logger.error(
+                f"Query failed: {str(e)}",
+                extra={
+                    'user_action': 'query',
+                    'operation': 'ai_query',
+                    'result': 'failed',
+                    'duration_ms': round(duration_ms, 2)
+                }
+            )
             error_event = {'type': 'error', 'error': str(e)}
             yield f"data: {json.dumps(error_event)}\n\n"
     
@@ -240,12 +287,28 @@ def get_snapshot():
 def handle_connect():
     """Handle WebSocket connection"""
     print(f"✅ Client connected")
+    audit_logger.info(
+        "Client connected to WebSocket",
+        extra={
+            'user_action': 'websocket_connect',
+            'operation': 'connection',
+            'result': 'success'
+        }
+    )
 
 
 @socketio.on('disconnect')
 def handle_disconnect():
     """Handle WebSocket disconnection"""
     print(f"⚠️  Client disconnected")
+    audit_logger.info(
+        "Client disconnected from WebSocket",
+        extra={
+            'user_action': 'websocket_disconnect',
+            'operation': 'connection',
+            'result': 'success'
+        }
+    )
 
 
 def run_event_loop(loop):
