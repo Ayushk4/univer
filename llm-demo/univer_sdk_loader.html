@@ -124,8 +124,12 @@
         let univerAPI = null;
         let currentWorkbookId = null;
         
-        // WebSocket connection
-        const socket = io('http://localhost:5001', {
+        // Configuration: Use dynamic URLs based on window.location
+        const API_BASE_URL = window.location.origin;
+        const UNIVER_URL = window.UNIVER_CONFIG?.url || `${window.location.protocol}//${window.location.hostname}:8000/sheets/`;
+        
+        // WebSocket connection - use dynamic URL
+        const socket = io(API_BASE_URL, {
             transports: ['websocket', 'polling']
         });
         
@@ -210,7 +214,7 @@
                 // Fallback: Load default Univer via iframe
                 setTimeout(() => {
                     document.getElementById('univer-container').innerHTML = `
-                        <iframe src="http://localhost:3002/sheets/" 
+                        <iframe src="${UNIVER_URL}" 
                                 style="width: 100%; height: 100%; border: none;">
                         </iframe>
                     `;
@@ -222,7 +226,7 @@
         async function fetchAndLoadSnapshot() {
             try {
                 console.log('📥 Fetching snapshot from server...');
-                const response = await fetch('http://localhost:5001/snapshot');
+                const response = await fetch(`${API_BASE_URL}/snapshot`);
                 
                 if (!response.ok) {
                     if (response.status === 404) {
