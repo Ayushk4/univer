@@ -150,9 +150,25 @@
         });
         
         function showNotification(title, message) {
+            // Limit max notifications to prevent memory leak
+            const existingNotifications = document.querySelectorAll('.update-notification');
+            if (existingNotifications.length >= 3) {
+                existingNotifications[0].remove();  // Remove oldest
+            }
+            
             const notification = document.createElement('div');
             notification.className = 'update-notification';
-            notification.innerHTML = `<strong>${title}</strong><br><small>${message}</small>`;
+            
+            // XSS prevention - use textContent
+            const strong = document.createElement('strong');
+            strong.textContent = title;
+            const br = document.createElement('br');
+            const small = document.createElement('small');
+            small.textContent = message;
+            
+            notification.appendChild(strong);
+            notification.appendChild(br);
+            notification.appendChild(small);
             document.body.appendChild(notification);
             
             setTimeout(() => {
@@ -326,10 +342,17 @@
                 
             } catch (error) {
                 console.error('❌ Failed to create default workbook:', error);
-                document.getElementById('loading').innerHTML = `
-                    <h2>❌ Failed to Load</h2>
-                    <p style="color: #f44336;">${error.message}</p>
-                `;
+                const loadingEl = document.getElementById('loading');
+                loadingEl.innerHTML = '';
+                
+                const h2 = document.createElement('h2');
+                h2.textContent = '❌ Failed to Load';
+                loadingEl.appendChild(h2);
+                
+                const p = document.createElement('p');
+                p.style.color = '#f44336';
+                p.textContent = error.message || 'Unknown error';  // XSS prevention
+                loadingEl.appendChild(p);
             }
         }
         

@@ -57,10 +57,18 @@ import base64
 import json
 from typing import Any, Optional
 import logging
+import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Import audit logger (will be initialized when logging_config is imported)
+try:
+    from logging_config import audit_logger
+except ImportError:
+    # Fallback if logging_config not available
+    audit_logger = logger
 
 
 class UniverSheetsController:
@@ -268,44 +276,55 @@ class UniverSheetsController:
         Much more efficient than get_range_data for large sheets.
         Returns up to 50 matches.
         """
+        # Properly escape keyword and find_by to prevent injection
         js_code = f"""
         (async () => {{
             const workbook = window.univerAPI.getActiveWorkbook();
             const sheet = workbook.getActiveSheet();
             
+            // Parameters (properly escaped via JSON serialization)
+            const keyword = {json.dumps(keyword)};
+            const findBy = {json.dumps(find_by)};
+            
             // Simple search implementation
             const maxRows = sheet.getMaxRows();
             const maxCols = sheet.getMaxColumns();
             const results = [];
+            const RESULT_LIMIT = 50;
             
-            for (let row = 0; row < Math.min(maxRows, 100); row++) {{
-                for (let col = 0; col < Math.min(maxCols, 26); col++) {{
+            // Early exit flag
+            let limitReached = false;
+            
+            for (let row = 0; row < Math.min(maxRows, 100) && !limitReached; row++) {{
+                for (let col = 0; col < Math.min(maxCols, 26) && !limitReached; col++) {{
                     const cell = sheet.getRange(row, col);
                     const cellData = cell.getCellData();
                     
                     let searchValue = '';
-                    if ('{find_by}' === 'formula' && cellData && cellData.f) {{
+                    if (findBy === 'formula' && cellData && cellData.f) {{
                         searchValue = cellData.f;
-                    }} else if ('{find_by}' === 'value' && cellData && cellData.v != null) {{
+                    }} else if (findBy === 'value' && cellData && cellData.v != null) {{
                         searchValue = String(cellData.v);
                     }}
                     
-                    if (searchValue.includes('{keyword}')) {{
+                    if (searchValue.includes(keyword)) {{
                         results.push({{
                             range: cell.getA1Notation(),
                             value: cellData ? cellData.v : null,
                             formula: cellData ? cellData.f : null
                         }});
+                        
+                        if (results.length >= RESULT_LIMIT) {{
+                            limitReached = true;
+                        }}
                     }}
-                    
-                    if (results.length >= 50) break;
                 }}
-                if (results.length >= 50) break;
             }}
             
             return {{
                 total: results.length,
-                results: results
+                results: results,
+                truncated: limitReached
             }};
         }})()
         """
