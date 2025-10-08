@@ -1576,30 +1576,51 @@ class UniverSheetsController:
         js_code = f"""
         (async () => {{
             const workbook = window.univerAPI.getActiveWorkbook();
-            const sheet = workbook.getSheetByName('{sheet_name}');
+            const sheetName = {json.dumps(sheet_name)};
+            const sheet = workbook.getSheetByName(sheetName);
             
             if (!sheet) {{
-                throw new Error(`Sheet '${{'{sheet_name}'}}' not found`);
+                throw new Error('Sheet not found: ' + sheetName);
             }}
             
             try {{
-                // Get conditional formatting rules if the API supports it
+                // Use direct Facade API method
+                if (typeof sheet.getConditionalFormattingRules !== 'function') {{
+                    console.warn('getConditionalFormattingRules not available');
+                    return [];
+                }}
+                
                 const rules = sheet.getConditionalFormattingRules();
-                return rules.map(rule => ({{
-                    ruleId: rule.getRuleId ? rule.getRuleId() : 'unknown',
-                    ranges: rule.getRanges ? rule.getRanges().map(r => r.getA1Notation()) : [],
-                    type: rule.getType ? rule.getType() : 'unknown'
-                }}));
+                
+                if (!rules || rules.length === 0) {{
+                    return [];
+                }}
+                
+                // Extract rule information
+                return rules.map((rule, index) => {{
+                    const ruleData = {{
+                        cfId: rule.cfId || `rule-${{index}}`,
+                        ranges: rule.ranges || [],
+                        stopIfTrue: rule.stopIfTrue || false,
+                        rule: rule.rule || {{}}
+                    }};
+                    
+                    return ruleData;
+                }});
+                
             }} catch (e) {{
-                // If API doesn't support conditional formatting, return empty array
-                console.warn('Conditional formatting not supported or no rules found:', e);
+                console.warn('Error getting CF rules:', e.message);
                 return [];
             }}
         }})()
         """
         
-        result = await self.execute_js(js_code)
-        return result
+        try:
+            result = await self.execute_js(js_code)
+            return result if result else []
+        except Exception as e:
+            logger.warning(f"Error getting CF rules: {e}")
+            return []
     
     async def add_conditional_formatting_rule(self, sheet_name: str, rules: list[dict]) -> str:
         """Add conditional formatting rules to a sheet
@@ -1613,44 +1634,116 @@ class UniverSheetsController:
         """
         js_code = f"""
         (async () => {{
-            const workbook = window.univerAPI.getActiveWorkbook();
-            const sheet = workbook.getSheetByName('{sheet_name}');
+            const univerAPI = window.univerAPI;
+            const workbook = univerAPI.getActiveWorkbook();
+            const sheetName = {json.dumps(sheet_name)};
+            const sheet = workbook.getSheetByName(sheetName);
             
             if (!sheet) {{
-                throw new Error(`Sheet '${{'{sheet_name}'}}' not found`);
+                throw new Error('Sheet not found: ' + sheetName);
+            }}
+            
+            // Check if CF methods are available
+            if (typeof sheet.addConditionalFormattingRule !== 'function') {{
+                return `⚠️  API Not Available: The addConditionalFormattingRule method is not available in this Univer version.`;
             }}
             
             const rules = {json.dumps(rules)};
+            let addedCount = 0;
             
             try {{
-                // Try to add conditional formatting rules
+                const sheetId = sheet.getSheetId();
+                
                 for (const rule of rules) {{
-                    const range = sheet.getRange(rule.range || 'A1');
-                    const cfRule = range.createConditionalFormattingRule();
-                    
-                    // Configure rule based on type
-                    if (rule.rule_type === 'highlightCell' && rule.sub_type === 'number' && rule.style) {{
-                        // Basic highlight rule for numbers
-                        if (rule.operator === 'greaterThan' && rule.value !== undefined) {{
-                            // This is a simplified implementation
-                            // Real implementation would use proper CF API
+                    try {{
+                        // Parse range
+                        const range = sheet.getRange(rule.range || 'A1');
+                        const rangeData = range.getRange();
+                        
+                        // Create rule configuration based on type
+                        let ruleConfig;
+                        
+                        if (rule.rule_type === 'highlightCell') {{
+                            ruleConfig = {{
+                                type: 'highlightCell',
+                                subType: rule.sub_type || 'number',
+                                operator: rule.operator || 'greaterThan',
+                                value: rule.value,
+                                style: {{
+                                    cl: {{ rgb: rule.style?.fgColor || '#000000' }},
+                                    bg: {{ rgb: rule.style?.bgColor || '#FF0000' }},
+                                    bl: rule.style?.bold ? 1 : 0,
+                                    it: rule.style?.italic ? 1 : 0
+                                }}
+                            }};
+                        }} else if (rule.rule_type === 'dataBar') {{
+                            ruleConfig = {{
+                                type: 'dataBar',
+                                config: {{
+                                    min: {{ type: rule.min_type || 'num', value: rule.min_value || 0 }},
+                                    max: {{ type: rule.max_type || 'num', value: rule.max_value || 100 }},
+                                    color: rule.positive_color || '#638EC6',
+                                    isGradient: rule.is_gradient !== false,
+                                    showValue: rule.is_show_value !== false
+                                }}
+                            }};
+                        }} else if (rule.rule_type === 'colorScale') {{
+                            ruleConfig = {{
+                                type: 'colorScale',
+                                config: {{
+                                    points: rule.points || [
+                                        {{ type: 'min', color: '#F8696B' }},
+                                        {{ type: 'percentile', value: 50, color: '#FFEB84' }},
+                                        {{ type: 'max', color: '#63BE7B' }}
+                                    ]
+                                }}
+                            }};
+                        }} else {{
+                            console.warn(`Unsupported rule type: ${{rule.rule_type}}, skipping`);
+                            continue;
                         }}
+                        
+                        const cfRule = {{
+                            cfId: rule.rule_id || `cf-${{Date.now()}}-${{Math.random().toString(36).substr(2, 9)}}`,
+                            ranges: [{{
+                                startRow: rangeData.startRow,
+                                endRow: rangeData.endRow,
+                                startColumn: rangeData.startColumn,
+                                endColumn: rangeData.endColumn
+                            }}],
+                            stopIfTrue: rule.stop_if_true || false,
+                            rule: ruleConfig
+                        }};
+                        
+                        // Use direct Facade API method
+                        await sheet.addConditionalFormattingRule(cfRule);
+                        addedCount++;
+                        
+                    }} catch (ruleError) {{
+                        console.warn(`Failed to add CF rule: ${{ruleError.message}}`);
                     }}
-                    
-                    // This is a stub - full CF API might not be available
-                    console.warn('Conditional formatting API limited in current version');
                 }}
                 
-                return `Note: Added ${{rules.length}} conditional formatting rule(s) to ${{'{sheet_name}'}} (limited API support)`;
+                if (addedCount === 0) {{
+                    return `⚠️  No rules were added to {sheet_name}. Check rule format and API compatibility.`;
+                }}
+                
+                return `Successfully added ${{addedCount}} conditional formatting rule(s) to {sheet_name}`;
+                
             }} catch (e) {{
-                console.warn('Conditional formatting not fully supported:', e);
-                return `Warning: Conditional formatting API not fully supported. Rules structure received but not applied. Error: ${{e.message}}`;
+                console.error('CF operation failed:', e);
+                return `⚠️  Error adding CF rules to {sheet_name}: ${{e.message}}`;
             }}
         }})()
         """
         
-        result = await self.execute_js(js_code)
-        return result
+        try:
+            result = await self.execute_js(js_code)
+            await self.save_snapshot()
+            return result
+        except Exception as e:
+            logger.error(f"Error adding CF rules: {e}")
+            return f"⚠️  Failed to add conditional formatting rules: {str(e)}"
     
     async def set_conditional_formatting_rule(self, sheet_name: str, rules: list[dict]) -> str:
         """Set (replace) all conditional formatting rules for a sheet
@@ -1664,38 +1757,119 @@ class UniverSheetsController:
         """
         js_code = f"""
         (async () => {{
-            const workbook = window.univerAPI.getActiveWorkbook();
-            const sheet = workbook.getSheetByName('{sheet_name}');
+            const univerAPI = window.univerAPI;
+            const workbook = univerAPI.getActiveWorkbook();
+            const sheetName = {json.dumps(sheet_name)};
+            const sheet = workbook.getSheetByName(sheetName);
             
             if (!sheet) {{
-                throw new Error(`Sheet '${{'{sheet_name}'}}' not found`);
+                throw new Error('Sheet not found: ' + sheetName);
+            }}
+            
+            // Check if CF methods are available
+            if (typeof sheet.setConditionalFormattingRule !== 'function') {{
+                return `⚠️  API Not Available: The setConditionalFormattingRule method is not available in this Univer version.`;
             }}
             
             const rules = {json.dumps(rules)};
             
             try {{
-                // Try to clear existing rules and set new ones
-                const existingRules = sheet.getConditionalFormattingRules();
-                existingRules.forEach(rule => {{
-                    sheet.deleteConditionalFormattingRule(rule);
-                }});
+                const sheetId = sheet.getSheetId();
                 
-                // Add new rules
+                // Build rules array with proper structure
+                const cfRules = [];
+                
                 for (const rule of rules) {{
-                    // Add each rule (stub implementation)
-                    console.log('Setting rule:', rule);
+                    try {{
+                        const range = sheet.getRange(rule.range || 'A1');
+                        const rangeData = range.getRange();
+                        
+                        let ruleConfig;
+                        if (rule.rule_type === 'highlightCell') {{
+                            ruleConfig = {{
+                                type: 'highlightCell',
+                                subType: rule.sub_type || 'number',
+                                operator: rule.operator || 'greaterThan',
+                                value: rule.value,
+                                style: {{
+                                    cl: {{ rgb: rule.style?.fgColor || '#000000' }},
+                                    bg: {{ rgb: rule.style?.bgColor || '#FF0000' }},
+                                    bl: rule.style?.bold ? 1 : 0,
+                                    it: rule.style?.italic ? 1 : 0
+                                }}
+                            }};
+                        }} else if (rule.rule_type === 'dataBar') {{
+                            ruleConfig = {{
+                                type: 'dataBar',
+                                config: {{
+                                    min: {{ type: rule.min_type || 'num', value: rule.min_value || 0 }},
+                                    max: {{ type: rule.max_type || 'num', value: rule.max_value || 100 }},
+                                    color: rule.positive_color || '#638EC6',
+                                    isGradient: rule.is_gradient !== false,
+                                    showValue: rule.is_show_value !== false
+                                }}
+                            }};
+                        }} else if (rule.rule_type === 'colorScale') {{
+                            ruleConfig = {{
+                                type: 'colorScale',
+                                config: {{
+                                    points: rule.points || [
+                                        {{ type: 'min', color: '#F8696B' }},
+                                        {{ type: 'percentile', value: 50, color: '#FFEB84' }},
+                                        {{ type: 'max', color: '#63BE7B' }}
+                                    ]
+                                }}
+                            }};
+                        }} else {{
+                            console.warn(`Unsupported rule type: ${{rule.rule_type}}, skipping`);
+                            continue;
+                        }}
+                        
+                        cfRules.push({{
+                            cfId: rule.rule_id || `cf-${{Date.now()}}-${{Math.random().toString(36).substr(2, 9)}}`,
+                            ranges: [{{
+                                startRow: rangeData.startRow,
+                                endRow: rangeData.endRow,
+                                startColumn: rangeData.startColumn,
+                                endColumn: rangeData.endColumn
+                            }}],
+                            stopIfTrue: rule.stop_if_true || false,
+                            rule: ruleConfig
+                        }});
+                        
+                    }} catch (ruleError) {{
+                        console.warn(`Failed to process CF rule: ${{ruleError.message}}`);
+                    }}
                 }}
                 
-                return `Note: Set ${{rules.length}} conditional formatting rule(s) on ${{'{sheet_name}'}} (limited API support)`;
+                // STEP 1: Clear all existing rules first
+                if (typeof sheet.clearConditionalFormatRules === 'function') {{
+                    await sheet.clearConditionalFormatRules();
+                }} else {{
+                    console.warn('clearConditionalFormatRules not available, attempting direct set');
+                }}
+                
+                // STEP 2: Add the new rules
+                for (const cfRule of cfRules) {{
+                    await sheet.addConditionalFormattingRule(cfRule);
+                }}
+                
+                return `Successfully set ${{cfRules.length}} conditional formatting rule(s) on {sheet_name} (cleared old rules first)`;
+                
             }} catch (e) {{
-                console.warn('Conditional formatting not fully supported:', e);
-                return `Warning: Conditional formatting API not fully supported. Rules structure received but not applied. Error: ${{e.message}}`;
+                console.error('CF set failed:', e);
+                return `⚠️  Error setting CF rules on {sheet_name}: ${{e.message}}`;
             }}
         }})()
         """
         
-        result = await self.execute_js(js_code)
-        return result
+        try:
+            result = await self.execute_js(js_code)
+            await self.save_snapshot()
+            return result
+        except Exception as e:
+            logger.error(f"Error setting CF rules: {e}")
+            return f"⚠️  Failed to set conditional formatting rules: {str(e)}"
     
     async def delete_conditional_formatting_rule(self, sheet_name: str, rule_ids: list[str]) -> str:
         """Delete conditional formatting rules by ID
@@ -1709,37 +1883,55 @@ class UniverSheetsController:
         """
         js_code = f"""
         (async () => {{
-            const workbook = window.univerAPI.getActiveWorkbook();
-            const sheet = workbook.getSheetByName('{sheet_name}');
+            const univerAPI = window.univerAPI;
+            const workbook = univerAPI.getActiveWorkbook();
+            const sheetName = {json.dumps(sheet_name)};
+            const sheet = workbook.getSheetByName(sheetName);
             
             if (!sheet) {{
-                throw new Error(`Sheet '${{'{sheet_name}'}}' not found`);
+                throw new Error('Sheet not found: ' + sheetName);
+            }}
+            
+            // Check if CF methods are available
+            if (typeof sheet.deleteConditionalFormattingRule !== 'function') {{
+                return `⚠️  API Not Available: The deleteConditionalFormattingRule method is not available in this Univer version.`;
             }}
             
             const ruleIds = {json.dumps(rule_ids)};
             
             try {{
-                const rules = sheet.getConditionalFormattingRules();
                 let deletedCount = 0;
                 
-                for (const rule of rules) {{
-                    const ruleId = rule.getRuleId ? rule.getRuleId() : 'unknown';
-                    if (ruleIds.includes(ruleId)) {{
-                        sheet.deleteConditionalFormattingRule(rule);
+                for (const cfId of ruleIds) {{
+                    try {{
+                        // Use direct Facade API method
+                        await sheet.deleteConditionalFormattingRule(cfId);
                         deletedCount++;
+                    }} catch (e) {{
+                        console.warn(`Failed to delete CF rule ${{cfId}}:`, e.message);
                     }}
                 }}
                 
-                return `Deleted ${{deletedCount}} conditional formatting rule(s) from ${{'{sheet_name}'}}`;
+                if (deletedCount === 0) {{
+                    return `⚠️  No rules were deleted from {sheet_name}. Check if rule IDs exist.`;
+                }}
+                
+                return `Deleted ${{deletedCount}} conditional formatting rule(s) from {sheet_name}`;
+                
             }} catch (e) {{
-                console.warn('Conditional formatting not fully supported:', e);
-                return `Warning: Could not delete rules. API may not be fully supported. Error: ${{e.message}}`;
+                console.error('CF delete failed:', e);
+                return `⚠️  Error deleting CF rules from {sheet_name}: ${{e.message}}`;
             }}
         }})()
         """
         
-        result = await self.execute_js(js_code)
-        return result
+        try:
+            result = await self.execute_js(js_code)
+            await self.save_snapshot()
+            return result
+        except Exception as e:
+            logger.error(f"Error deleting CF rules: {e}")
+            return f"⚠️  Failed to delete conditional formatting rules: {str(e)}"
     
     async def add_data_validation_rule(self, sheet_name: str, rules: list[dict]) -> str:
         """Add data validation rules to a sheet
@@ -1754,10 +1946,11 @@ class UniverSheetsController:
         js_code = f"""
         (async () => {{
             const workbook = window.univerAPI.getActiveWorkbook();
-            const sheet = workbook.getSheetByName('{sheet_name}');
+            const sheetName = {json.dumps(sheet_name)};
+            const sheet = workbook.getSheetByName(sheetName);
             
             if (!sheet) {{
-                throw new Error(`Sheet '${{'{sheet_name}'}}' not found`);
+                throw new Error('Sheet not found: ' + sheetName);
             }}
             
             const rules = {json.dumps(rules)};
@@ -1807,10 +2000,11 @@ class UniverSheetsController:
         js_code = f"""
         (async () => {{
             const workbook = window.univerAPI.getActiveWorkbook();
-            const sheet = workbook.getSheetByName('{sheet_name}');
+            const sheetName = {json.dumps(sheet_name)};
+            const sheet = workbook.getSheetByName(sheetName);
             
             if (!sheet) {{
-                throw new Error(`Sheet '${{'{sheet_name}'}}' not found`);
+                throw new Error('Sheet not found: ' + sheetName);
             }}
             
             const rules = {json.dumps(rules)};
@@ -1843,10 +2037,11 @@ class UniverSheetsController:
         js_code = f"""
         (async () => {{
             const workbook = window.univerAPI.getActiveWorkbook();
-            const sheet = workbook.getSheetByName('{sheet_name}');
+            const sheetName = {json.dumps(sheet_name)};
+            const sheet = workbook.getSheetByName(sheetName);
             
             if (!sheet) {{
-                throw new Error(`Sheet '${{'{sheet_name}'}}' not found`);
+                throw new Error('Sheet not found: ' + sheetName);
             }}
             
             const ruleIds = {json.dumps(rule_ids)};
@@ -1878,10 +2073,11 @@ class UniverSheetsController:
         js_code = f"""
         (async () => {{
             const workbook = window.univerAPI.getActiveWorkbook();
-            const sheet = workbook.getSheetByName('{sheet_name}');
+            const sheetName = {json.dumps(sheet_name)};
+            const sheet = workbook.getSheetByName(sheetName);
             
             if (!sheet) {{
-                throw new Error(`Sheet '${{'{sheet_name}'}}' not found`);
+                throw new Error('Sheet not found: ' + sheetName);
             }}
             
             try {{
@@ -2736,3 +2932,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+

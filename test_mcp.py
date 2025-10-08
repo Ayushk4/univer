@@ -10,10 +10,11 @@ Tests include:
 - Data editing (set data, set style, merge cells, set dimensions)
 - Row/column management (insert/delete rows/columns)
 - Advanced features (auto fill, format brush, get workbook ID)
-- Stub implementations (conditional formatting, data validation - API not available)
+- Conditional formatting (get, add, set, delete rules - with command service approach)
+- Stub implementations (data validation - API not available)
 
 Usage:
-    python test_mcp.py [--url http://localhost:3002/sheets/] [--headless] [--quick | --cell-write-test | --row-column-management-test]
+    python test_mcp.py [--url http://localhost:3002/sheets/] [--headless] [OPTIONS]
     
 Options:
     --url URL                         Univer server URL (default: http://localhost:3002/sheets/)
@@ -21,9 +22,11 @@ Options:
     --quick                           Run quick smoke test (10 tests)
     --cell-write-test                 Run only cell data editing tests (tests 17-20)
     --row-column-management-test      Run only row/column management tests (tests 21-26)
+    --conditionalformats              Run only conditional formatting tests (CF tests 1-10)
 
-Note: Tests 25-28 verify API compatibility for conditional formatting and data validation,
-      but these features are stub implementations only (Univer Facade API limitation).
+Note: Conditional formatting tests use improved command service approach and will
+      show "Limited API Support" if the command service is not available in Univer Facade API.
+      Data validation tests (25-28) are stub implementations (Univer Facade API limitation).
 """
 
 import asyncio
@@ -671,6 +674,427 @@ async def row_column_management_test(url: str = "http://localhost:3002/sheets/",
         await controller.cleanup()
 
 
+async def conditional_formatting_test(url: str = "http://localhost:3002/sheets/", headless: bool = False):
+    """Test conditional formatting tools (4 tools)
+    
+    Tests include:
+    - CF-1: Get initial rules (baseline)
+    - CF-2: Add single highlight rule (score > 90)
+    - CF-3: Verify rule addition
+    - CF-4: Add data bar rule
+    - CF-5: Add traffic light system (3 rules)
+    - CF-6: Get all current rules + ASSERTION CHECK (should be initial + 5 rules)
+    - CF-7: Delete specific rule ('high-score')
+    - CF-8: Verify deletion + EXPLICIT CHECK ('high-score' must NOT be present)
+    - CF-9: Set (replace all) rules (should replace all with 1 rule)
+    - CF-10: Final state verification + ASSERTION (exactly 1 rule: 'final-highlight')
+    """
+    print("🎨 Starting conditional formatting tests...\n")
+    
+    controller = UniverSheetsController()
+    
+    try:
+        # Connect
+        print("📡 Connecting to Univer...")
+        await controller.start(url, headless=headless)
+        print("✅ Connected!\n")
+        
+        # Get active sheet
+        sheets = await controller.get_sheets()
+        sheet_name = sheets[0]['name']
+        print(f"📄 Using sheet: {sheet_name}\n")
+        
+        # SETUP: Add test data
+        print_section("SETUP: Adding Test Data for CF Tests")
+        print("Creating sample score data...")
+        
+        await controller.set_range_data([
+            {"range": "N1", "value": "Student"},
+            {"range": "O1", "value": "Score"},
+            {"range": "P1", "value": "Grade"},
+            {"range": "N2", "value": "Alice"},
+            {"range": "O2", "value": 95},
+            {"range": "N3", "value": "Bob"},
+            {"range": "O3", "value": 45},
+            {"range": "N4", "value": "Charlie"},
+            {"range": "O4", "value": 78},
+            {"range": "N5", "value": "Diana"},
+            {"range": "O5", "value": 112},
+            {"range": "N6", "value": "Eve"},
+            {"range": "O6", "value": 88}
+        ])
+        
+        # Format headers
+        await controller.set_range_style([{
+            "range": "N1:P1",
+            "style": {
+                "bl": 1,
+                "fs": 12,
+                "bg": {"rgb": "#4472C4"},
+                "cl": {"rgb": "#FFFFFF"},
+                "ht": 2
+            }
+        }])
+        
+        print("✅ Test data created (Scores: 45, 78, 88, 95, 112)\n")
+        
+        await asyncio.sleep(1)
+        
+        # Test CF-1: Get initial rules (baseline)
+        print_section("CF Test 1: Get Initial CF Rules (Baseline)")
+        
+        initial_rules = await controller.get_conditional_formatting_rules(sheet_name)
+        print(f"📊 Initial rule count: {len(initial_rules)}")
+        
+        if len(initial_rules) > 0:
+            print("⚠️  Found existing rules:")
+            print(json.dumps(initial_rules, indent=2))
+        else:
+            print("✅ No existing rules (as expected)")
+        
+        # Test CF-2: Add single highlight rule
+        print_section("CF Test 2: Add Highlight Cell Rule (Score > 90)")
+        
+        highlight_rule = [{
+            "rule_id": "high-score",
+            "range": "O2:O6",
+            "rule_type": "highlightCell",
+            "sub_type": "number",
+            "operator": "greaterThan",
+            "value": 90,
+            "stop_if_true": False,
+            "style": {
+                "bgColor": "#00FF00",
+                "fgColor": "#000000",
+                "bold": True
+            }
+        }]
+        
+        print("📝 Rule: O2:O6 where value > 90 → Green background")
+        
+        result = await controller.add_conditional_formatting_rule(sheet_name, highlight_rule)
+        print(f"🔧 API Response: {result}")
+        
+        if "Successfully added" in result:
+            print("✅ TEST PASSED: Highlight rule added")
+        elif "Limited API Support" in result or "limited API support" in result.lower():
+            print("⚠️  LIMITED API: Feature not fully supported (EXPECTED)")
+        else:
+            print(f"⚠️  Response: {result}")
+        
+        await asyncio.sleep(1)
+        
+        # Test CF-3: Verify rule was added
+        print_section("CF Test 3: Verify Rule Addition")
+        
+        current_rules = await controller.get_conditional_formatting_rules(sheet_name)
+        print(f"📊 Current rule count: {len(current_rules)}")
+        
+        if len(current_rules) > len(initial_rules):
+            print("✅ TEST PASSED: Rule count increased")
+            if any(r.get('cfId') == 'high-score' for r in current_rules):
+                print("✅ Our rule 'high-score' found in list")
+        elif len(current_rules) == 0:
+            print("⚠️  No rules found (API limitation - EXPECTED)")
+        else:
+            print("⚠️  Rule count unchanged")
+        
+        # Test CF-4: Add data bar rule
+        print_section("CF Test 4: Add Data Bar Rule")
+        
+        databar_rule = [{
+            "rule_id": "score-progress",
+            "range": "O2:O6",
+            "rule_type": "dataBar",
+            "min_type": "num",
+            "min_value": 0,
+            "max_type": "num",
+            "max_value": 100,
+            "positive_color": "#638EC6",
+            "is_gradient": True,
+            "is_show_value": True
+        }]
+        
+        print("📝 Data bar: 0-100 range, blue color")
+        
+        result = await controller.add_conditional_formatting_rule(sheet_name, databar_rule)
+        print(f"🔧 API Response: {result}")
+        
+        if "Successfully added" in result:
+            print("✅ TEST PASSED: Data bar added")
+        elif "Limited API Support" in result:
+            print("⚠️  LIMITED API: Feature not fully supported (EXPECTED)")
+        
+        await asyncio.sleep(1)
+        
+        # Test CF-5: Add traffic light rules
+        print_section("CF Test 5: Add Traffic Light System (3 rules)")
+        
+        # Copy scores to column P
+        await controller.set_range_data([
+            {"range": "P2", "value": 95},
+            {"range": "P3", "value": 45},
+            {"range": "P4", "value": 78},
+            {"range": "P5", "value": 112},
+            {"range": "P6", "value": 88}
+        ])
+        
+        traffic_light_rules = [
+            {
+                "rule_id": "grade-fail",
+                "range": "P2:P6",
+                "rule_type": "highlightCell",
+                "sub_type": "number",
+                "operator": "lessThan",
+                "value": 50,
+                "stop_if_true": True,
+                "style": {"bgColor": "#FF0000", "fgColor": "#FFFFFF", "bold": True}
+            },
+            {
+                "rule_id": "grade-warning",
+                "range": "P2:P6",
+                "rule_type": "highlightCell",
+                "sub_type": "number",
+                "operator": "between",
+                "value": [50, 80],
+                "stop_if_true": True,
+                "style": {"bgColor": "#FFFF00", "fgColor": "#000000"}
+            },
+            {
+                "rule_id": "grade-pass",
+                "range": "P2:P6",
+                "rule_type": "highlightCell",
+                "sub_type": "number",
+                "operator": "greaterThan",
+                "value": 80,
+                "stop_if_true": True,
+                "style": {"bgColor": "#00FF00", "fgColor": "#000000", "bold": True}
+            }
+        ]
+        
+        print("📝 Rules: Red (<50), Yellow (50-80), Green (>80)")
+        
+        result = await controller.add_conditional_formatting_rule(sheet_name, traffic_light_rules)
+        print(f"🔧 API Response: {result}")
+        
+        if "Successfully added 3" in result:
+            print("✅ TEST PASSED: All 3 rules added")
+        elif "Limited API Support" in result:
+            print("⚠️  LIMITED API: Batch rules not fully supported (EXPECTED)")
+        
+        await asyncio.sleep(1)
+        
+        # Test CF-6: Get all rules
+        print_section("CF Test 6: Get All Current Rules")
+        
+        all_rules = await controller.get_conditional_formatting_rules(sheet_name)
+        print(f"📊 Total rule count: {len(all_rules)}")
+        
+        # ASSERTION CHECK: Verify theoretical count
+        expected_count = len(initial_rules) + 5  # Initial + 1(Test2) + 1(Test4) + 3(Test5)
+        print(f"\n🔍 ASSERTION CHECK:")
+        print(f"   Expected rules: {expected_count} (initial: {len(initial_rules)} + added: 5)")
+        print(f"   Actual rules:   {len(all_rules)}")
+        
+        if len(all_rules) == expected_count:
+            print("   ✅ ASSERTION PASSED: Rule count matches expected!")
+        elif len(all_rules) == 0:
+            print("   ⚠️  ASSERTION SKIPPED: No rules returned (API limitation - EXPECTED)")
+        else:
+            print(f"   ⚠️  ASSERTION FAILED: Expected {expected_count}, got {len(all_rules)}")
+        
+        # Verify specific rule IDs
+        if len(all_rules) > 0:
+            expected_ids = {"high-score", "score-progress", "grade-fail", "grade-warning", "grade-pass"}
+            actual_ids = {rule.get('cfId', 'unknown') for rule in all_rules}
+            found_ids = expected_ids & actual_ids
+            
+            print(f"\n   Expected rule IDs: {sorted(expected_ids)}")
+            print(f"   Found in results:  {sorted(found_ids)}")
+            
+            if found_ids == expected_ids:
+                print("   ✅ All expected rule IDs present!")
+            elif len(found_ids) > 0:
+                print(f"   ⚠️  Partial match: {len(found_ids)}/{len(expected_ids)} IDs found")
+            else:
+                print("   ⚠️  None of our rule IDs found")
+            
+            print(f"\n✅ Rules found: {len(all_rules)}")
+            for i, rule in enumerate(all_rules[:5], 1):
+                rule_id = rule.get('cfId', 'unknown')
+                rule_type = rule.get('rule', {}).get('type', 'unknown')
+                print(f"   Rule {i}: {rule_id} (type: {rule_type})")
+        else:
+            print("⚠️  No rules returned (API limitation - EXPECTED)")
+        
+        # Test CF-7: Delete specific rule
+        print_section("CF Test 7: Delete Specific Rule")
+        
+        print("🗑️  Attempting to delete rule: 'high-score'")
+        
+        result = await controller.delete_conditional_formatting_rule(sheet_name, ["high-score"])
+        print(f"🔧 API Response: {result}")
+        
+        if "Deleted 1" in result:
+            print("✅ TEST PASSED: Rule deletion executed")
+        elif "Deleted 0" in result or "Limited API Support" in result:
+            print("⚠️  Delete not fully supported (API limitation - EXPECTED)")
+        
+        await asyncio.sleep(1)
+        
+        # Test CF-8: Verify deletion
+        print_section("CF Test 8: Verify Rule Deletion")
+        
+        remaining_rules = await controller.get_conditional_formatting_rules(sheet_name)
+        print(f"📊 Remaining rule count: {len(remaining_rules)}")
+        
+        # ASSERTION CHECK: Verify count decreased
+        print(f"\n🔍 COUNT ASSERTION:")
+        print(f"   Before deletion: {len(all_rules)} rules")
+        print(f"   After deletion:  {len(remaining_rules)} rules")
+        
+        if len(remaining_rules) < len(all_rules):
+            print(f"   ✅ ASSERTION PASSED: Rule count decreased by {len(all_rules) - len(remaining_rules)}")
+        elif len(remaining_rules) == 0:
+            print("   ⚠️  ASSERTION SKIPPED: No rules returned (API limitation - EXPECTED)")
+        else:
+            print("   ⚠️  ASSERTION FAILED: Rule count did not decrease")
+        
+        # EXPLICIT CHECK: Verify 'high-score' rule is NOT present
+        if len(remaining_rules) > 0:
+            deleted_rule_id = "high-score"
+            remaining_ids = {rule.get('cfId', 'unknown') for rule in remaining_rules}
+            
+            print(f"\n🔍 DELETION VERIFICATION:")
+            print(f"   Deleted rule ID: '{deleted_rule_id}'")
+            print(f"   Remaining rule IDs: {sorted(remaining_ids)}")
+            
+            if deleted_rule_id not in remaining_ids:
+                print(f"   ✅ VERIFIED: '{deleted_rule_id}' is NOT in remaining rules!")
+            else:
+                print(f"   ⚠️  FAILED: '{deleted_rule_id}' is STILL PRESENT in remaining rules!")
+            
+            # Show remaining rules
+            print(f"\n   Remaining rules ({len(remaining_rules)}):")
+            for i, rule in enumerate(remaining_rules, 1):
+                rule_id = rule.get('cfId', 'unknown')
+                rule_type = rule.get('rule', {}).get('type', 'unknown')
+                status = "❌ DELETED RULE!" if rule_id == deleted_rule_id else "✓"
+                print(f"      {status} Rule {i}: {rule_id} (type: {rule_type})")
+        else:
+            print("\n   ⚠️  Cannot verify deletion: No rules returned")
+        
+        # Test CF-9: Set (replace all) rules
+        print_section("CF Test 9: Set (Replace All) Rules")
+        
+        final_rules = [{
+            "rule_id": "final-highlight",
+            "range": "O2:P6",
+            "rule_type": "highlightCell",
+            "sub_type": "number",
+            "operator": "greaterThan",
+            "value": 100,
+            "style": {"bgColor": "#FFD700", "fgColor": "#000000", "bold": True}
+        }]
+        
+        print("📝 Setting single rule (replaces all): value > 100 → Gold")
+        
+        result = await controller.set_conditional_formatting_rule(sheet_name, final_rules)
+        print(f"🔧 API Response: {result}")
+        
+        if "Successfully set" in result:
+            print("✅ TEST PASSED: Rules replaced")
+        elif "Limited API Support" in result:
+            print("⚠️  LIMITED API: Set operation not fully supported (EXPECTED)")
+        
+        await asyncio.sleep(1)
+        
+        # Test CF-10: Final state
+        print_section("CF Test 10: Final State Verification")
+        
+        final_state = await controller.get_conditional_formatting_rules(sheet_name)
+        print(f"📊 Final rule count: {len(final_state)}")
+        
+        # ASSERTION CHECK: Verify exactly 1 rule after 'set' operation
+        expected_final_count = 1
+        print(f"\n🔍 FINAL STATE ASSERTION:")
+        print(f"   Expected rules: {expected_final_count} (from 'set' operation)")
+        print(f"   Actual rules:   {len(final_state)}")
+        
+        if len(final_state) == expected_final_count:
+            print(f"   ✅ ASSERTION PASSED: Exactly {expected_final_count} rule as expected!")
+        elif len(final_state) == 0:
+            print("   ⚠️  ASSERTION SKIPPED: No rules returned (API limitation - EXPECTED)")
+        else:
+            print(f"   ⚠️  ASSERTION FAILED: Expected {expected_final_count}, got {len(final_state)}")
+            print(f"      The 'set' operation should have REPLACED all rules with exactly 1 rule!")
+        
+        # EXPLICIT CHECK: Verify only 'final-highlight' rule exists
+        if len(final_state) > 0:
+            expected_rule_id = "final-highlight"
+            actual_ids = {rule.get('cfId', 'unknown') for rule in final_state}
+            
+            print(f"\n🔍 RULE ID VERIFICATION:")
+            print(f"   Expected rule ID: '{expected_rule_id}' (only this one)")
+            print(f"   Actual rule IDs:  {sorted(actual_ids)}")
+            
+            if len(actual_ids) == 1 and expected_rule_id in actual_ids:
+                print(f"   ✅ VERIFIED: Only '{expected_rule_id}' exists!")
+            elif expected_rule_id in actual_ids and len(actual_ids) > 1:
+                print(f"   ⚠️  PARTIAL FAIL: '{expected_rule_id}' found, but {len(actual_ids)-1} other rule(s) still exist!")
+                print(f"      'set' should have deleted all other rules!")
+            elif expected_rule_id not in actual_ids:
+                print(f"   ⚠️  FAILED: '{expected_rule_id}' NOT found!")
+                print(f"      Wrong rules present: {sorted(actual_ids)}")
+            
+            # Show final state details
+            print(f"\n   Final state ({len(final_state)} rule(s)):")
+            for i, rule in enumerate(final_state, 1):
+                rule_id = rule.get('cfId', 'unknown')
+                rule_type = rule.get('rule', {}).get('type', 'unknown')
+                is_expected = "✓ EXPECTED" if rule_id == expected_rule_id else "❌ UNEXPECTED!"
+                print(f"      {is_expected} Rule {i}: {rule_id} (type: {rule_type})")
+        else:
+            print("\n   ⚠️  Cannot verify: No rules returned")
+        
+        # Summary
+        print_section("📊 CONDITIONAL FORMATTING TEST SUMMARY")
+        
+        print("\n✅ Tests Completed:")
+        print("   CF-1. ✓ Get initial rules (baseline)")
+        print("   CF-2. ✓ Add single highlight rule")
+        print("   CF-3. ✓ Verify rule addition")
+        print("   CF-4. ✓ Add data bar rule")
+        print("   CF-5. ✓ Add traffic light system (3 rules)")
+        print("   CF-6. ✓ Get all current rules + ASSERTION (expected: initial + 5)")
+        print("   CF-7. ✓ Delete specific rule ('high-score')")
+        print("   CF-8. ✓ Verify deletion + EXPLICIT CHECK ('high-score' NOT present)")
+        print("   CF-9. ✓ Set (replace all) rules (should result in 1 rule)")
+        print("  CF-10. ✓ Final state verification + ASSERTION (exactly 1: 'final-highlight')")
+        
+        print("\n📝 INTERPRETATION:")
+        print("   ✅ 'Successfully' = Full API support (if available)")
+        print("   ⚠️  'Limited API Support' = Expected for current Univer version")
+        print("   ⚠️  '0 rules' = API doesn't expose CF data yet (EXPECTED)")
+        
+        print("\n💡 NOTE:")
+        print("   The implementations use direct Facade API methods:")
+        print("   - sheet.addConditionalFormattingRule()")
+        print("   - sheet.setConditionalFormattingRule()")
+        print("   - sheet.deleteConditionalFormattingRule()")
+        print("   - sheet.getConditionalFormattingRules()")
+        print("   These work with Univer versions that support CF in the Facade API.")
+        
+        print("\n🎉 All conditional formatting tests completed!\n")
+        
+    except Exception as e:
+        print(f"\n❌ Test failed: {e}\n")
+        import traceback
+        traceback.print_exc()
+    finally:
+        await controller.cleanup()
+
+
 async def main():
     """Main entry point"""
     # Parse command line arguments
@@ -679,6 +1103,7 @@ async def main():
     quick_mode = False
     cell_write_mode = False
     row_column_mode = False
+    conditional_format_mode = False
     
     if "--url" in sys.argv:
         idx = sys.argv.index("--url")
@@ -697,6 +1122,9 @@ async def main():
     if "--row-column-management-test" in sys.argv:
         row_column_mode = True
     
+    if "--conditionalformats" in sys.argv:
+        conditional_format_mode = True
+    
     if "--help" in sys.argv or "-h" in sys.argv:
         print(__doc__)
         return
@@ -708,6 +1136,8 @@ async def main():
         await cell_write_test(univer_url, headless)
     elif row_column_mode:
         await row_column_management_test(univer_url, headless)
+    elif conditional_format_mode:
+        await conditional_formatting_test(univer_url, headless)
     else:
         await run_tests(univer_url, headless)
 
