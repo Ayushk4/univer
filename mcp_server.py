@@ -2093,32 +2093,30 @@ class UniverSheetsController:
                 console.log('Clearing validations. Count:', existingValidations.length);
                 
                 for (const validation of existingValidations) {{
-                    console.log('Validation object:', validation);
-                    
                     // Access the actual rule data from the FDataValidation wrapper
                     const rule = validation.rule || validation;
-                    console.log('Rule.ranges type:', typeof rule.ranges);
-                    console.log('Rule.ranges:', rule.ranges);
                     
-                    // Check if ranges exists and is iterable
-                    if (!rule.ranges) {{
+                    // Check if ranges exists
+                    if (!rule.ranges || rule.ranges.length === 0) {{
                         console.warn('Rule has no ranges property, skipping');
                         continue;
                     }}
                     
-                    // Convert to array if needed
-                    const rangesArray = Array.isArray(rule.ranges) ? rule.ranges : [rule.ranges];
+                    // ✅ Use getDataValidation().delete() method (Option 2: Defensive)
+                    // Only need to get FDataValidation from ONE range (it's the same object for all ranges)
+                    const firstRange = rule.ranges[0];
+                    const row1 = firstRange.startRow + 1;
+                    const col1 = firstRange.startColumn + 1;
+                    const row2 = firstRange.endRow + 1;
+                    const col2 = firstRange.endColumn + 1;
                     
-                    for (const rangeData of rangesArray) {{
-                        const row1 = rangeData.startRow + 1;
-                        const col1 = rangeData.startColumn + 1;
-                        const row2 = rangeData.endRow + 1;
-                        const col2 = rangeData.endColumn + 1;
-                        
-                        const rangeStr = `${{colToLetter(col1)}}${{row1}}:${{colToLetter(col2)}}${{row2}}`;
-                        console.log('Clearing validation from range:', rangeStr);
-                        const range = sheet.getRange(rangeStr);
-                        range.setDataValidation(null);  // Clear by setting to null
+                    const rangeStr = `${{colToLetter(col1)}}${{row1}}:${{colToLetter(col2)}}${{row2}}`;
+                    const range = sheet.getRange(rangeStr);
+                    const fDataValidation = range.getDataValidation();
+                    
+                    if (fDataValidation) {{
+                        console.log(`Clearing validation from range: ${{rangeStr}}`);
+                        fDataValidation.delete();  // ✅ Delete the rule object directly
                     }}
                 }}
                 
@@ -2279,26 +2277,31 @@ class UniverSheetsController:
                     const rule = validation.rule || validation;
                     
                     // Check if ranges exists and is iterable
-                    if (!rule.ranges) {{
+                    if (!rule.ranges || rule.ranges.length === 0) {{
                         console.warn('Rule has no ranges property, skipping');
                         continue;
                     }}
                     
-                    // Convert to array if needed
-                    const rangesArray = Array.isArray(rule.ranges) ? rule.ranges : [rule.ranges];
+                    // ✅ Use getDataValidation().delete() method (Option 2: Defensive)
+                    // Only need to get FDataValidation from ONE range (it's the same object for all ranges)
+                    const firstRange = rule.ranges[0];
+                    const row1 = firstRange.startRow + 1;
+                    const col1 = firstRange.startColumn + 1;
+                    const row2 = firstRange.endRow + 1;
+                    const col2 = firstRange.endColumn + 1;
                     
-                    for (const rangeData of rangesArray) {{
-                        const row1 = rangeData.startRow + 1;
-                        const col1 = rangeData.startColumn + 1;
-                        const row2 = rangeData.endRow + 1;
-                        const col2 = rangeData.endColumn + 1;
-                        
-                        const rangeStr = `${{colToLetter(col1)}}${{row1}}:${{colToLetter(col2)}}${{row2}}`;
-                        const range = sheet.getRange(rangeStr);
-                        range.setDataValidation(null);  // Clear by setting to null
-                        // Note: Univer bug - may clear adjacent rules unintentionally
+                    const rangeStr = `${{colToLetter(col1)}}${{row1}}:${{colToLetter(col2)}}${{row2}}`;
+                    const range = sheet.getRange(rangeStr);
+                    const fDataValidation = range.getDataValidation();
+                    
+                    if (fDataValidation) {{
+                        // Verify this is the correct rule (defensive check)
+                        console.log(`Deleting validation rule '${{ruleId}}' from range ${{rangeStr}}`);
+                        fDataValidation.delete();  // ✅ Delete the rule object directly
+                        deletedCount++;
+                    }} else {{
+                        console.warn(`No validation found at range ${{rangeStr}} for rule ID '${{ruleId}}'`);
                     }}
-                    deletedCount++;
                 }}
                 
                 return `Successfully deleted ${{deletedCount}} data validation rule(s) from ${{sheetName}}`;

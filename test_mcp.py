@@ -1363,9 +1363,9 @@ async def data_validation_test(url: str = "http://localhost:3002/sheets/", headl
         
         if len(remaining_rules) == expected_after_delete:
             print(f"✅ ASSERTION PASSED: Rule count decreased to {expected_after_delete}")
-        elif actual_diff >= 1:
-            print(f"⚠️  PARTIAL PASS: {actual_diff} rule(s) deleted (expected 1)")
-            print(f"   Note: Univer's setDataValidation(null) has a known bug that may delete adjacent rules")
+        elif actual_diff > 1:
+            print(f"⚠️  WARNING: {actual_diff} rule(s) deleted (expected 1)")
+            print(f"   Note: Bug should be fixed with getDataValidation().delete() method")
         else:
             print(f"❌ ASSERTION FAILED: Expected {expected_after_delete}, got {len(remaining_rules)}")
         
@@ -1428,11 +1428,13 @@ async def data_validation_test(url: str = "http://localhost:3002/sheets/", headl
             
             # Verify it's the correct rule (Age > 21)
             final_rule = final_state[0]
-            if (final_rule.get('validation_type') == 'integer' and 
-                final_rule.get('operator') == 'greaterThan'):
-                print(f"   ✅ Correct rule type: integer with greaterThan operator")
+            rule_type = final_rule.get('validation_type')
+            operator = final_rule.get('operator')
+            # Note: Univer stores both 'integer' and 'decimal' as 'decimal' internally
+            if (rule_type in ['integer', 'decimal'] and operator == 'greaterThan'):
+                print(f"✅ Rule Type is : {rule_type} number validation with {operator} operator")
             else:
-                print(f"   ⚠️  Unexpected rule: {final_rule.get('validation_type')}")
+                print(f"   ⚠️  Unexpected rule: type={rule_type}, operator={operator}")
             
             print(f"\n📋 Final state (1 rule):")
             print(f"      Rule ID: {final_rule.get('rule_id', 'N/A')}")
