@@ -1617,10 +1617,11 @@ class UniverSheetsController:
         
         try:
             result = await self.execute_js(js_code)
-            return result if result else []
+            await self.save_snapshot()
         except Exception as e:
             logger.warning(f"Error getting CF rules: {e}")
-            return []
+            result = []
+        return result
     
     async def add_conditional_formatting_rule(self, sheet_name: str, rules: list[dict]) -> str:
         """Add conditional formatting rules to a sheet
@@ -1657,7 +1658,7 @@ class UniverSheetsController:
                 for (const rule of rules) {{
                     try {{
                         // Parse range
-                        const range = sheet.getRange(rule.range || 'A1');
+                    const range = sheet.getRange(rule.range || 'A1');
                         const rangeData = range.getRange();
                         
                         // Create rule configuration based on type
@@ -1740,10 +1741,10 @@ class UniverSheetsController:
         try:
             result = await self.execute_js(js_code)
             await self.save_snapshot()
-            return result
         except Exception as e:
             logger.error(f"Error adding CF rules: {e}")
-            return f"⚠️  Failed to add conditional formatting rules: {str(e)}"
+            result = f"⚠️  Failed to add conditional formatting rules: {str(e)}"
+        return result
     
     async def set_conditional_formatting_rule(self, sheet_name: str, rules: list[dict]) -> str:
         """Set (replace) all conditional formatting rules for a sheet
@@ -1866,10 +1867,10 @@ class UniverSheetsController:
         try:
             result = await self.execute_js(js_code)
             await self.save_snapshot()
-            return result
         except Exception as e:
             logger.error(f"Error setting CF rules: {e}")
-            return f"⚠️  Failed to set conditional formatting rules: {str(e)}"
+            result = f"⚠️  Failed to set conditional formatting rules: {str(e)}"
+        return result
     
     async def delete_conditional_formatting_rule(self, sheet_name: str, rule_ids: list[str]) -> str:
         """Delete conditional formatting rules by ID
@@ -1928,10 +1929,10 @@ class UniverSheetsController:
         try:
             result = await self.execute_js(js_code)
             await self.save_snapshot()
-            return result
         except Exception as e:
             logger.error(f"Error deleting CF rules: {e}")
-            return f"⚠️  Failed to delete conditional formatting rules: {str(e)}"
+            result = f"⚠️  Failed to delete conditional formatting rules: {str(e)}"
+        return result
     
     async def add_data_validation_rule(self, sheet_name: str, rules: list[dict]) -> str:
         """Add data validation rules to a sheet
@@ -1945,7 +1946,8 @@ class UniverSheetsController:
         """
         js_code = f"""
         (async () => {{
-            const workbook = window.univerAPI.getActiveWorkbook();
+            const univerAPI = window.univerAPI;
+            const workbook = univerAPI.getActiveWorkbook();
             const sheetName = {json.dumps(sheet_name)};
             const sheet = workbook.getSheetByName(sheetName);
             
@@ -1954,37 +1956,103 @@ class UniverSheetsController:
             }}
             
             const rules = {json.dumps(rules)};
-            
-            try {{
                 let addedCount = 0;
                 
                 for (const rule of rules) {{
-                    const range = sheet.getRange(rule.range_a1);
+                try {{
+                    const range = sheet.getRange(rule.range_a1 || rule.range);
+                    let builder = univerAPI.newDataValidation();
                     
-                    // Create data validation based on type
-                    if (rule.validation_type === 'list' && rule.source) {{
-                        // List validation (dropdown)
-                        const validationRule = range.getDataValidation();
-                        // This is a simplified implementation
-                        addedCount++;
-                    }} else if (rule.validation_type === 'integer' || rule.validation_type === 'decimal') {{
-                        // Number validation
-                        addedCount++;
+                    // Build validation based on type
+                    if (rule.validation_type === 'list' || rule.validation_type === 'listMultiple') {{
+                        if (rule.source) {{
+                            // Comma-separated list
+                            const values = rule.source.split(',').map(v => v.trim());
+                            builder = builder.requireValueInList(values, rule.allow_multiple || false);
+                        }} else if (rule.source_range) {{
+                            // Range reference
+                            builder = builder.requireValueInRange(rule.source_range, rule.allow_multiple || false);
+                        }}
                     }} else if (rule.validation_type === 'checkbox') {{
-                        // Checkbox validation
-                        addedCount++;
+                        if (rule.checked_value && rule.unchecked_value) {{
+                            builder = builder.requireCheckbox(rule.checked_value, rule.unchecked_value);
+                        }} else {{
+                            builder = builder.requireCheckbox();
+                        }}
+                    }} else if (rule.validation_type === 'integer' || rule.validation_type === 'decimal') {{
+                        const val1 = parseFloat(rule.value1);
+                        const val2 = rule.value2 ? parseFloat(rule.value2) : null;
+                        
+                        if (rule.operator === 'between') {{
+                            builder = builder.requireNumberBetween(val1, val2);
+                        }} else if (rule.operator === 'greaterThan') {{
+                            builder = builder.requireNumberGreaterThan(val1);
+                        }} else if (rule.operator === 'lessThan') {{
+                            builder = builder.requireNumberLessThan(val1);
+                        }} else if (rule.operator === 'greaterThanOrEqual') {{
+                            builder = builder.requireNumberGreaterThanOrEqualTo(val1);
+                        }} else if (rule.operator === 'lessThanOrEqual') {{
+                            builder = builder.requireNumberLessThanOrEqualTo(val1);
+                        }} else if (rule.operator === 'equal') {{
+                            builder = builder.requireNumberEqualTo(val1);
+                        }} else if (rule.operator === 'notEqual') {{
+                            builder = builder.requireNumberNotEqualTo(val1);
+                        }}
+                    }} else if (rule.validation_type === 'date') {{
+                        const date1 = new Date(rule.value1);
+                        const date2 = rule.value2 ? new Date(rule.value2) : null;
+                        
+                        if (rule.operator === 'between') {{
+                            builder = builder.requireDateBetween(date1, date2);
+                        }} else if (rule.operator === 'after') {{
+                            builder = builder.requireDateAfter(date1);
+                        }} else if (rule.operator === 'before') {{
+                            builder = builder.requireDateBefore(date1);
+                        }}
+                    }} else if (rule.validation_type === 'text_length') {{
+                        const len = parseInt(rule.value1);
+                        
+                        if (rule.operator === 'lessThan') {{
+                            builder = builder.requireTextLengthLessThan(len);
+                        }} else if (rule.operator === 'greaterThan') {{
+                            builder = builder.requireTextLengthGreaterThan(len);
+                        }}
+                    }} else if (rule.validation_type === 'custom' || rule.validation_type === 'custom_formula') {{
+                        builder = builder.requireFormulaSatisfied(rule.custom_formula || rule.formula1);
                     }}
+                    
+                    // Set options
+                    builder = builder.setOptions({{
+                        allowBlank: rule.ignore_blank !== false,
+                        showErrorMessage: rule.show_error_message !== false,
+                        errorTitle: rule.error_title || '',
+                        error: rule.error_message || 'Invalid input',
+                        errorStyle: rule.error_style || 0,
+                        showInputMessage: rule.show_input_message || false,
+                        inputTitle: rule.input_title || '',
+                        inputMessage: rule.input_message || ''
+                    }});
+                    
+                    const validation = builder.build();
+                    range.setDataValidation(validation);
+                    addedCount++;
+                    
+                }} catch (ruleError) {{
+                    console.warn(`Failed to add data validation rule: ${{ruleError.message}}`);
                 }}
-                
-                return `Note: Added ${{addedCount}} data validation rule(s) to ${{'{sheet_name}'}} (limited API support)`;
-            }} catch (e) {{
-                console.warn('Data validation not fully supported:', e);
-                return `Warning: Data validation API not fully supported. Rules structure received but not applied. Error: ${{e.message}}`;
             }}
+            
+            return `Successfully added ${{addedCount}} data validation rule(s) to ${{sheetName}}`;
         }})()
         """
         
-        result = await self.execute_js(js_code)
+        try:
+            result = await self.execute_js(js_code)
+            # print(result)
+            await self.save_snapshot()
+        except Exception as e:
+            logger.error(f"Error adding data validation rules: {e}")
+            result = f"⚠️ Failed to add data validation rules: {str(e)}"
         return result
     
     async def set_data_validation_rule(self, sheet_name: str, rules: list[dict]) -> str:
@@ -1992,14 +2060,15 @@ class UniverSheetsController:
         
         Args:
             sheet_name: Target sheet name
-            rules: List of data validation rule dicts with rule_id
+            rules: List of data validation rule dicts
         
         Returns:
             Success message string
         """
         js_code = f"""
         (async () => {{
-            const workbook = window.univerAPI.getActiveWorkbook();
+            const univerAPI = window.univerAPI;
+            const workbook = univerAPI.getActiveWorkbook();
             const sheetName = {json.dumps(sheet_name)};
             const sheet = workbook.getSheetByName(sheetName);
             
@@ -2007,21 +2076,152 @@ class UniverSheetsController:
                 throw new Error('Sheet not found: ' + sheetName);
             }}
             
-            const rules = {json.dumps(rules)};
-            
             try {{
-                // Try to clear existing validation and set new rules
-                // This is a stub implementation
+                // Helper function to convert column number to letter
+                const colToLetter = (col) => {{
+                    let letter = '';
+                    while (col > 0) {{
+                        const mod = (col - 1) % 26;
+                        letter = String.fromCharCode(65 + mod) + letter;
+                        col = Math.floor((col - 1) / 26);
+                    }}
+                    return letter;
+                }};
                 
-                return `Note: Set ${{rules.length}} data validation rule(s) on ${{'{sheet_name}'}} (limited API support)`;
+                // STEP 1: Clear all existing data validation rules
+                const existingValidations = sheet.getDataValidations();
+                console.log('Clearing validations. Count:', existingValidations.length);
+                
+                for (const validation of existingValidations) {{
+                    console.log('Validation object:', validation);
+                    
+                    // Access the actual rule data from the FDataValidation wrapper
+                    const rule = validation.rule || validation;
+                    console.log('Rule.ranges type:', typeof rule.ranges);
+                    console.log('Rule.ranges:', rule.ranges);
+                    
+                    // Check if ranges exists and is iterable
+                    if (!rule.ranges) {{
+                        console.warn('Rule has no ranges property, skipping');
+                        continue;
+                    }}
+                    
+                    // Convert to array if needed
+                    const rangesArray = Array.isArray(rule.ranges) ? rule.ranges : [rule.ranges];
+                    
+                    for (const rangeData of rangesArray) {{
+                        const row1 = rangeData.startRow + 1;
+                        const col1 = rangeData.startColumn + 1;
+                        const row2 = rangeData.endRow + 1;
+                        const col2 = rangeData.endColumn + 1;
+                        
+                        const rangeStr = `${{colToLetter(col1)}}${{row1}}:${{colToLetter(col2)}}${{row2}}`;
+                        console.log('Clearing validation from range:', rangeStr);
+                        const range = sheet.getRange(rangeStr);
+                        range.setDataValidation(null);  // Clear by setting to null
+                    }}
+                }}
+                
+                // STEP 2: Add new rules
+            const rules = {json.dumps(rules)};
+                let addedCount = 0;
+            
+                for (const rule of rules) {{
+            try {{
+                        const range = sheet.getRange(rule.range_a1 || rule.range);
+                        let builder = univerAPI.newDataValidation();
+                        
+                        // Build validation based on type (same as add_data_validation_rule)
+                        if (rule.validation_type === 'list' || rule.validation_type === 'listMultiple') {{
+                            if (rule.source) {{
+                                const values = rule.source.split(',').map(v => v.trim());
+                                builder = builder.requireValueInList(values, rule.allow_multiple || false);
+                            }} else if (rule.source_range) {{
+                                builder = builder.requireValueInRange(rule.source_range, rule.allow_multiple || false);
+                            }}
+                        }} else if (rule.validation_type === 'checkbox') {{
+                            if (rule.checked_value && rule.unchecked_value) {{
+                                builder = builder.requireCheckbox(rule.checked_value, rule.unchecked_value);
+                            }} else {{
+                                builder = builder.requireCheckbox();
+                            }}
+                        }} else if (rule.validation_type === 'integer' || rule.validation_type === 'decimal') {{
+                            const val1 = parseFloat(rule.value1);
+                            const val2 = rule.value2 ? parseFloat(rule.value2) : null;
+                            
+                            if (rule.operator === 'between') {{
+                                builder = builder.requireNumberBetween(val1, val2);
+                            }} else if (rule.operator === 'greaterThan') {{
+                                builder = builder.requireNumberGreaterThan(val1);
+                            }} else if (rule.operator === 'lessThan') {{
+                                builder = builder.requireNumberLessThan(val1);
+                            }} else if (rule.operator === 'greaterThanOrEqual') {{
+                                builder = builder.requireNumberGreaterThanOrEqualTo(val1);
+                            }} else if (rule.operator === 'lessThanOrEqual') {{
+                                builder = builder.requireNumberLessThanOrEqualTo(val1);
+                            }} else if (rule.operator === 'equal') {{
+                                builder = builder.requireNumberEqualTo(val1);
+                            }} else if (rule.operator === 'notEqual') {{
+                                builder = builder.requireNumberNotEqualTo(val1);
+                            }}
+                        }} else if (rule.validation_type === 'date') {{
+                            const date1 = new Date(rule.value1);
+                            const date2 = rule.value2 ? new Date(rule.value2) : null;
+                            
+                            if (rule.operator === 'between') {{
+                                builder = builder.requireDateBetween(date1, date2);
+                            }} else if (rule.operator === 'after') {{
+                                builder = builder.requireDateAfter(date1);
+                            }} else if (rule.operator === 'before') {{
+                                builder = builder.requireDateBefore(date1);
+                            }}
+                        }} else if (rule.validation_type === 'text_length') {{
+                            const len = parseInt(rule.value1);
+                            
+                            if (rule.operator === 'lessThan') {{
+                                builder = builder.requireTextLengthLessThan(len);
+                            }} else if (rule.operator === 'greaterThan') {{
+                                builder = builder.requireTextLengthGreaterThan(len);
+                            }}
+                        }} else if (rule.validation_type === 'custom' || rule.validation_type === 'custom_formula') {{
+                            builder = builder.requireFormulaSatisfied(rule.custom_formula || rule.formula1);
+                        }}
+                        
+                        // Set options
+                        builder = builder.setOptions({{
+                            allowBlank: rule.ignore_blank !== false,
+                            showErrorMessage: rule.show_error_message !== false,
+                            errorTitle: rule.error_title || '',
+                            error: rule.error_message || 'Invalid input',
+                            errorStyle: rule.error_style || 0,
+                            showInputMessage: rule.show_input_message || false,
+                            inputTitle: rule.input_title || '',
+                            inputMessage: rule.input_message || ''
+                        }});
+                        
+                        const validation = builder.build();
+                        range.setDataValidation(validation);
+                        addedCount++;
+                    }} catch (ruleError) {{
+                        console.warn(`Failed to set data validation rule: ${{ruleError.message}}`);
+                    }}
+                }}
+                
+                return `Successfully replaced all data validation rules. Set ${{addedCount}} new rule(s) on ${{sheetName}}`;
+                
             }} catch (e) {{
-                console.warn('Data validation not fully supported:', e);
-                return `Warning: Data validation API not fully supported. Rules structure received but not applied. Error: ${{e.message}}`;
+                console.error('Data validation set failed:', e);
+                return `⚠️ Error setting data validation rules: ${{e.message}}`;
             }}
         }})()
         """
         
-        result = await self.execute_js(js_code)
+        try:
+            result = await self.execute_js(js_code)
+            await self.save_snapshot()
+        except Exception as e:
+            logger.error(f"Error setting data validation rules: {e}")
+            result = f"⚠️ Failed to set data validation rules: {str(e)}"
         return result
     
     async def delete_data_validation_rule(self, sheet_name: str, rule_ids: list[str]) -> str:
@@ -2036,7 +2236,8 @@ class UniverSheetsController:
         """
         js_code = f"""
         (async () => {{
-            const workbook = window.univerAPI.getActiveWorkbook();
+            const univerAPI = window.univerAPI;
+            const workbook = univerAPI.getActiveWorkbook();
             const sheetName = {json.dumps(sheet_name)};
             const sheet = workbook.getSheetByName(sheetName);
             
@@ -2045,20 +2246,76 @@ class UniverSheetsController:
             }}
             
             const ruleIds = {json.dumps(rule_ids)};
+            let deletedCount = 0;
             
             try {{
-                // Try to delete validation rules
-                // This is a stub implementation
+                // Helper function to convert column number to letter
+                const colToLetter = (col) => {{
+                    let letter = '';
+                    while (col > 0) {{
+                        const mod = (col - 1) % 26;
+                        letter = String.fromCharCode(65 + mod) + letter;
+                        col = Math.floor((col - 1) / 26);
+                    }}
+                    return letter;
+                }};
                 
-                return `Note: Attempted to delete ${{ruleIds.length}} data validation rule(s) from ${{'{sheet_name}'}} (limited API support)`;
+                const validations = sheet.getDataValidations();
+                console.log('Deleting validations. Looking for IDs:', ruleIds);
+                console.log('Available validations:', validations.length);
+                
+                for (const ruleId of ruleIds) {{
+                    // Access the actual rule data from the FDataValidation wrapper
+                    const validation = validations.find(v => {{
+                        const rule = v.rule || v;
+                        return rule.uid === ruleId;
+                    }});
+                    
+                    if (!validation) {{
+                        console.warn(`Rule ID '${{ruleId}}' not found`);
+                        continue;
+                    }}
+                    
+                    const rule = validation.rule || validation;
+                    
+                    // Check if ranges exists and is iterable
+                    if (!rule.ranges) {{
+                        console.warn('Rule has no ranges property, skipping');
+                        continue;
+                    }}
+                    
+                    // Convert to array if needed
+                    const rangesArray = Array.isArray(rule.ranges) ? rule.ranges : [rule.ranges];
+                    
+                    for (const rangeData of rangesArray) {{
+                        const row1 = rangeData.startRow + 1;
+                        const col1 = rangeData.startColumn + 1;
+                        const row2 = rangeData.endRow + 1;
+                        const col2 = rangeData.endColumn + 1;
+                        
+                        const rangeStr = `${{colToLetter(col1)}}${{row1}}:${{colToLetter(col2)}}${{row2}}`;
+                        const range = sheet.getRange(rangeStr);
+                        range.setDataValidation(null);  // Clear by setting to null
+                        // Note: Univer bug - may clear adjacent rules unintentionally
+                    }}
+                    deletedCount++;
+                }}
+                
+                return `Successfully deleted ${{deletedCount}} data validation rule(s) from ${{sheetName}}`;
+                
             }} catch (e) {{
-                console.warn('Data validation not fully supported:', e);
-                return `Warning: Could not delete rules. API may not be fully supported. Error: ${{e.message}}`;
+                console.error('Data validation deletion failed:', e);
+                return `⚠️ Error deleting data validation rules: ${{e.message}}`;
             }}
         }})()
         """
         
-        result = await self.execute_js(js_code)
+        try:
+            result = await self.execute_js(js_code)
+            await self.save_snapshot()
+        except Exception as e:
+            logger.error(f"Error deleting data validation rules: {e}")
+            result = f"⚠️ Failed to delete data validation rules: {str(e)}"
         return result
     
     async def get_data_validation_rules(self, sheet_name: str) -> list:
@@ -2068,11 +2325,12 @@ class UniverSheetsController:
             sheet_name: Target sheet name
         
         Returns:
-            List of data validation rules
+            List of data validation rules with their properties
         """
         js_code = f"""
         (async () => {{
-            const workbook = window.univerAPI.getActiveWorkbook();
+            const univerAPI = window.univerAPI;
+            const workbook = univerAPI.getActiveWorkbook();
             const sheetName = {json.dumps(sheet_name)};
             const sheet = workbook.getSheetByName(sheetName);
             
@@ -2081,17 +2339,71 @@ class UniverSheetsController:
             }}
             
             try {{
-                // Try to get data validation rules
-                // This is a stub implementation - API may not be fully available
+                if (typeof sheet.getDataValidations !== 'function') {{
+                    console.warn('getDataValidations method not available');
                 return [];
+                }}
+                
+                const validations = sheet.getDataValidations();
+                console.log(`Found ${{validations.length}} validation rules`);
+                
+                // Format the rules for return
+                const formattedRules = [];
+                for (const validation of validations) {{
+                    try {{
+                        // The validation is an FDataValidation wrapper object
+                        // The actual rule data is in validation.rule
+                        const rule = validation.rule || validation;
+                        
+                        // Safely extract range data to avoid circular references
+                        let safeRanges = [];
+                        if (rule.ranges && Array.isArray(rule.ranges)) {{
+                            safeRanges = rule.ranges.map(r => ({{
+                                startRow: r.startRow,
+                                endRow: r.endRow,
+                                startColumn: r.startColumn,
+                                endColumn: r.endColumn
+                            }}));
+                        }}
+                        
+                        formattedRules.push({{
+                            rule_id: rule.uid,
+                            validation_type: rule.type,
+                            ranges: safeRanges,
+                            operator: rule.operator || null,
+                            formula1: rule.formula1 || null,
+                            formula2: rule.formula2 || null,
+                            error_style: rule.errorStyle || null,
+                            render_mode: rule.renderMode || null,
+                            allow_blank: rule.allowBlank || null,
+                            show_error_message: rule.showErrorMessage || null,
+                            error_title: rule.errorTitle || null,
+                            error_message: rule.error || null
+                        }});
+                    }} catch (ruleError) {{
+                        console.error('Failed to format validation rule:', ruleError);
+                        console.error('Rule that failed:', validation);
+                        // Continue processing other rules
+                    }}
+                }}
+                
+                console.log(`Successfully formatted ${{formattedRules.length}} out of ${{validations.length}} validation rules`);
+                return formattedRules;
+                
             }} catch (e) {{
-                console.warn('Data validation not fully supported:', e);
-                return [];
+                console.error('CRITICAL ERROR in get_data_validation_rules:', e);
+                console.error('Error stack:', e.stack);
+                throw e; // Re-throw so Python side can see the error
             }}
         }})()
         """
         
-        result = await self.execute_js(js_code)
+        try:
+            result = await self.execute_js(js_code)
+            await self.save_snapshot()
+        except Exception as e:
+            logger.error(f"Error getting data validation rules: {e}")
+            result = []
         return result
 
 
